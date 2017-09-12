@@ -1,0 +1,48 @@
+/* Font families */
+@import url('https://fonts.googleapis.com/css?family=Lato');
+@import url('https://fonts.googleapis.com/css?family=Roboto');
+
+body {
+	background-color: black;
+}
+
+h1 {
+	color: white;
+
+	font-family: Lato;
+	font-size: 50px;
+	text-align: center;
+}
+
+p {
+	color: white;
+
+	font-family: Roboto;
+	font-size: 14px;
+	text-align: left;
+}
+
+p.subtitle {
+	text-align: center;
+	margin-top: -30px;
+}
+
+a {
+	color: lightblue;
+	text-decoration: none;
+}
+
+a:hover {
+	color: lightskyblue;
+}
+
+.canvasContainer {
+	margin: 0 auto;
+	text-align: center;
+}
+
+canvas {
+	width: 100%;
+	max-width: 640;
+	height: auto;
+}
