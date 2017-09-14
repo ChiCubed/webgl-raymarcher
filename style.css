@@ -27,6 +27,39 @@ p.subtitle {
 	margin-top: -30px;
 }
 
+button {
+	background-color: black;
+	color: white;
+	border: 1px solid white;
+
+	text-align: center;
+	font-family: Roboto;
+	font-size: 14px;
+
+	padding: 5px;
+	border-radius: 5px;
+}
+
+button:hover {
+	color: lightblue;
+	cursor: pointer;
+}
+
+button:active {
+	color: white;
+	background-color: skyblue;
+	border-color: skyblue;
+}
+
+button.center {
+	margin: 10px auto;
+	display: block;
+}
+
+button:focus {
+	outline: none;
+}
+
 a {
 	color: lightblue;
 	text-decoration: none;
