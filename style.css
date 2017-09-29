@@ -60,6 +60,19 @@ button:focus {
 	outline: none;
 }
 
+.CodeMirror {
+	overflow: hidden;
+	-webkit-transition: all .3s ease;
+	   -moz-transition: all .3s ease;
+	     -o-transition: all .3s ease;
+	        transition: all .3s ease;
+	margin: 10px auto;
+}
+
+.CodeMirror.hide {
+	height: 0px;
+}
+
 a {
 	color: lightblue;
 	text-decoration: none;
@@ -69,7 +82,7 @@ a:hover {
 	color: lightskyblue;
 }
 
-.canvasContainer {
+.canvas-container {
 	margin: 0 auto;
 	text-align: center;
 }
