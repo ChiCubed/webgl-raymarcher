@@ -27,6 +27,54 @@ p.subtitle {
 	margin-top: -30px;
 }
 
+.panel {
+    padding: 10px;
+    font-size: 13px;
+    font-family: Roboto;
+
+    background-color: #333333;
+}
+
+.panel span {
+    color: white;
+}
+
+.error {
+    font-family: monospace;
+}
+
+.error.lineno {
+    color: white;
+}
+
+.error.info {
+    color: lightblue;
+}
+
+.error.details {
+    color: white;
+}
+
+.errorwidget {
+    font-family: monospace;
+    background-color: darkred;
+}
+
+.errorwidget .info {
+    color: navajowhite;
+}
+
+.errorwidget .details {
+    color: white;
+}
+
+.remove-panel {
+    float: right;
+
+    color: white;
+    cursor: pointer;
+}
+
 button {
 	background-color: black;
 	color: white;
@@ -46,9 +94,7 @@ button:hover {
 }
 
 button:active {
-	color: white;
-	background-color: skyblue;
-	border-color: skyblue;
+	border-color: lightblue;
 }
 
 button.center {
@@ -62,11 +108,14 @@ button:focus {
 
 .CodeMirror {
 	overflow: hidden;
-	-webkit-transition: all .3s ease;
-	   -moz-transition: all .3s ease;
-	     -o-transition: all .3s ease;
-	        transition: all .3s ease;
 	margin: 10px auto;
+}
+
+.CodeMirror.smoothTransition {
+    -webkit-transition: all .3s ease;
+       -moz-transition: all .3s ease;
+         -o-transition: all .3s ease;
+            transition: all .3s ease;
 }
 
 .CodeMirror.hide {

@@ -16,6 +16,8 @@
 
 		<script src="codemirror/addon/edit/matchbrackets.js" type="text/javascript"></script>
 
+        <script src="codemirror/addon/display/panel.js" type="text/javascript"></script>
+
 		<script src="codemirror/addon/fold/foldcode.js" type="text/javascript"></script>
 		<script src="codemirror/addon/fold/brace-fold.js" type="text/javascript"></script>
 		<script src="codemirror/addon/fold/comment-fold.js" type="text/javascript"></script>
@@ -26,19 +28,20 @@
 
 		<script src="gl-matrix/gl-matrix-min.js" type="text/javascript"></script>
 
+        <script src="load-codemirror.js" type="text/javascript"></script>
 		<script src="init.js" type="text/javascript"></script>
-		<script src="load-codemirror.js" type="text/javascript" defer></script>
 
 		<link rel="stylesheet" type="text/css" href="style.css">
 		<title>WebGL Raymarcher</title>
 	</head>
-	<body>
+	<body onload="loadCodeMirror()">
 		<h1>WebGL Raymarcher</h1>
 		<p class="subtitle">Created by <a href="https://github.com/ChiCubed">@ChiCubed</a> using <a href="http://codemirror.net/">CodeMirror</a> and <a href="http://glmatrix.net/">glMatrix</a></p>
 		<div class="canvas-container">
 			<canvas id="gl-canvas" width="640" height="480"></canvas>
+            <p id="fps-counter" style="text-align: center"></p>
 		</div>
-		<button class="center" onclick="compileFragShader()">Recompile shader code</button>
+		<button class="center" onclick="recompileShader()">Recompile shader code</button>
 		<div id="codemirror-container"></div>
 	</body>
 </html>

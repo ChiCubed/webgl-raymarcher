@@ -1,12 +1,134 @@
-var headerCodeMirror = null, fragCodeMirror = null;
 var glContext, glCanvas;
+// Vertex Buffer Object
+var vbo;
+// WebGL shader program
+var program = null;
+// Uniforms - values which are constant for each
+// frame we render.
+var cameraPosUniform, viewToWorldUniform, screenSizeUniform, timeUniform;
 
-// yaw, pitch, roll
-var angle = [0.0, 0.0, 0.0];
+var fpsElement;
+
+// ID of next frame to render.
+var nextRenderFrame = null;
+// The time at which the current render loop started.
+var startTime;
+// The time at which the last frame was rendered.
+var lastTime;
+
+// The vertex shader source.
+var vertexSrc = "// Vertex shader source.                    \n"+
+                "                                            \n"+
+                "// current vertex position                  \n"+
+                "attribute vec2 position;                    \n"+
+                "                                            \n"+
+                "void main() {                               \n"+
+                "    // gl_Position must be set              \n"+
+                "    // by the vertex shader                 \n"+
+                "    gl_Position = vec4(position, 0.0, 1.0); \n"+
+                "}                                           \n";
+
+// Angle in terms of yaw, pitch, roll
+var angle = [0.0, Math.PI, 0.0];
+var cameraPos = [0.0, 0.0, -10.0];
 var viewToWorldMat;
 
+
+function createShader(gl, type, source) {
+	var shader = gl.createShader(type);
+
+	// Load the source into the shader
+	gl.shaderSource(shader, source);
+
+	gl.compileShader(shader);
+
+	// We only return the shader if it
+	// compiled successfully.
+	var success = gl.getShaderParameter(shader, gl.COMPILE_STATUS);
+	if (success) return shader;
+
+	// if the WebGL context wasn't lost:
+	if (!gl.isContextLost()) {
+		// Otherwise we log what went wrong.
+        var error = gl.getShaderInfoLog(shader);
+		console.log(error);
+
+		gl.deleteShader(shader);
+
+        return error;
+	}
+}
+
+
+function createProgram(gl, vertexShader, fragmentShader) {
+	var program = gl.createProgram();
+
+	gl.attachShader(program, vertexShader);
+	gl.attachShader(program, fragmentShader);
+
+	gl.linkProgram(program);
+
+	var success = gl.getProgramParameter(program, gl.LINK_STATUS);
+	if (success) return program;
+
+	if (!gl.isContextLost()) {
+        var error = gl.getProgramInfoLog(program);
+		console.log(error);
+
+		gl.deleteProgram(program);
+
+        return null;
+	}
+}
+
+function generateProgramFromSources(vertSrc, fragSrc) {
+    // First, get rid of error widgets.
+    if (currentErrorPanel !== null) {
+        currentErrorPanel.clear();
+        currentErrorPanel = null;
+    }
+
+    for (var i = 0; i < errorWidgets.length; ++i) {
+        errorWidgets[i].clear();
+    }
+    errorWidgets = [];
+
+    // Now, actually compile the shaders.
+    var vertShader = createShader(glContext, glContext.VERTEX_SHADER, vertSrc);
+	var fragShader = createShader(glContext, glContext.FRAGMENT_SHADER, fragSrc);
+
+    if (fragShader instanceof String || typeof fragShader === "string") {
+        renderError(fragShader, headerCodeMirror.lineCount());
+        return null; // compilation failed
+    }
+
+	// Now we 'link' them into a program
+	// which can be used by WebGL.
+	return createProgram(glContext, vertShader, fragShader);
+}
+
+
+function handleMouseMove(evt) {
+    angle[0] += evt.movementX / 300;
+    // We subtract instead of adding
+    // since the y-axis is inverted
+    angle[1] -= evt.movementY / 300;
+}
+
+function changePointerLock() {
+    if (document.pointerLockElement === glCanvas ||
+        document.mozPointerLockElement === glCanvas) {
+        document.addEventListener("mousemove", handleMouseMove, false);
+    } else {
+        document.removeEventListener("mousemove", handleMouseMove, false);
+    }
+}
+
+// Note: This function is called by load-codemirror.js
+// when all the files have been loaded.
 function init() {
 	glCanvas = document.getElementById('gl-canvas');
+    fpsElement = document.getElementById('fps-counter');
 
 	// Get WebGL context.
 	glContext = glCanvas.getContext('webgl') || glCanvas.getContext('experimental-webgl');
@@ -14,15 +136,138 @@ function init() {
 	if (!glContext) {
 		alert('Failed to initialise WebGL.');
 	}
+
+    // Create the two triangles which will be used
+    // to draw our scene on.
+
+    var vertices = [
+        -1.0, 1.0, // top left
+         1.0, 1.0, // top right
+         1.0,-1.0, // bottom right
+        -1.0, 1.0, // top left
+         1.0,-1.0, // bottom right
+        -1.0,-1.0  // bottom left
+    ];
+
+    vbo = glContext.createBuffer();
+
+    viewToWorldMat = mat4.create();
+
+	// gl.ARRAY_BUFFER is a 'bind point'
+	// for WebGL, which indicates where
+	// the data is located.
+	glContext.bindBuffer(glContext.ARRAY_BUFFER, vbo);
+
+	// We convert the positions to a 32-bit float array.
+	// gl.STATIC_DRAW indicates that the plane
+	// will not move during the render loop.
+	glContext.bufferData(glContext.ARRAY_BUFFER, new Float32Array(vertices), glContext.STATIC_DRAW);
+
+    glCanvas.requestPointerLock = glCanvas.requestPointerLock ||
+                               glCanvas.mozRequestPointerLock;
+
+    glCanvas.addEventListener("click", function() {
+        glCanvas.requestPointerLock();
+    }, false);
+
+    document.addEventListener("pointerlockchange", changePointerLock, false);
+    document.addEventListener("mozpointerlockchange", changePointerLock, false);
+
+    recompileShader();
 }
 
 function setViewToWorld() {
 	mat4.identity(viewToWorldMat);
+    // We rotate about the Y axis, then the X axis, then the Z axis.
 	mat4.rotateY(viewToWorldMat, viewToWorldMat, angle[0]);
 	mat4.rotateX(viewToWorldMat, viewToWorldMat, angle[1]);
 	mat4.rotateZ(viewToWorldMat, viewToWorldMat, angle[2]);
 }
 
-function compileFragShader() {
+function getProgramAttribLocations() {
+	// The shader program now needs to know
+	// where the data being used in the
+	// vertex shader (namely the
+	// position attribute) is coming from.
+	// We set that here.
+	var positionAttribLoc = glContext.getAttribLocation(program, 'position');
+	glContext.enableVertexAttribArray(positionAttribLoc);
+
+	// We now tell WebGL how to extract
+	// data out of the array verticesBuffer
+	// and give it to the vertex shader.
+	// The three main arguments are the
+	// first three. In order these indicate:
+	// 1.  where to bind the current ARRAY_BUFFER to
+	// 2.  how many components there are per attribute
+	//       (in this case two)
+	// 3.  the type of the data
+	glContext.vertexAttribPointer(positionAttribLoc, 2, glContext.FLOAT, false, 0, 0);
+
+
+	// We also get the uniform locations,
+	// to pass data to/from the shader.
+	cameraPosUniform = glContext.getUniformLocation(program, "cameraPos");
+	viewToWorldUniform = glContext.getUniformLocation(program, "viewToWorld");
+	screenSizeUniform = glContext.getUniformLocation(program, "screenSize");
+	timeUniform = glContext.getUniformLocation(program, "time");
+}
+
+function render(time) {
+    if (program === null) return;
+
+    var currentTime = time - startTime;
+    var deltaTime = time - lastTime;
+
+    // Tell WebGL to use our shader program.
+    glContext.useProgram(program);
+
+    glContext.clearColor(0.0, 0.0, 0.0, 1.0);
+    glContext.clear(glContext.COLOR_BUFFER_BIT);
+
+    setViewToWorld();
+
+    // Set uniforms.
+    glContext.uniform3f(cameraPosUniform, cameraPos[0], cameraPos[1], cameraPos[2]);
+    glContext.uniformMatrix4fv(viewToWorldUniform, false, viewToWorldMat);
+    glContext.uniform2f(screenSizeUniform, glCanvas.width, glCanvas.height);
+    glContext.uniform1f(timeUniform, currentTime / 1000);
+
+    // Actual drawing
+    glContext.drawArrays(glContext.TRIANGLES, 0, 6);
+	glContext.finish();
+
+	// Now we do FPS calculation.
+	var fps = 1000/deltaTime;
+	fpsElement.innerHTML = "FPS: "+fps.toFixed(2);
+
+	lastTime = time;
+
+    nextRenderFrame = requestAnimationFrame(render, glCanvas);
+}
+
+function recompileShader() {
+    // Note: This won't happen because we load the
+    // source before we initialise, unless the user clicks
+    // the button somehow while the page is loading,
+    // in which case we should do nothing anyway.
 	if (headerCodeMirror === null || fragCodeMirror === null) return;
+
+    // Stop the render loop.
+    if (nextRenderFrame !== null) cancelAnimationFrame(nextRenderFrame);
+
+    fpsElement.innerHTML = '';
+
+    var fragSrc = headerCodeMirror.getValue() + "\n" + fragCodeMirror.getValue();
+
+    program = generateProgramFromSources(vertexSrc, fragSrc);
+
+    if (program === null) return;
+
+    getProgramAttribLocations();
+
+    // We now restart the render loop.
+    startTime = performance.now();
+    lastTime = startTime;
+    nextRenderFrame = requestAnimationFrame(render, glCanvas);
 }
