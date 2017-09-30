@@ -16,6 +16,19 @@ var startTime;
 // The time at which the last frame was rendered.
 var lastTime;
 
+// Temporary variable for camera movement.
+// Used by 'handleKeyDown'.
+var camDisp;
+
+// Stores which keys are pressed.
+var keys = {};
+
+// time counters
+var currentTime, deltaTime;
+
+// Variables for use by the handleKeyDown function.
+var forwardsVec, backwardsVec, rightVec, leftVec;
+
 // The vertex shader source.
 var vertexSrc = "// Vertex shader source.                    \n"+
                 "                                            \n"+
@@ -29,8 +42,7 @@ var vertexSrc = "// Vertex shader source.                    \n"+
                 "}                                           \n";
 
 // Angle in terms of yaw, pitch, roll
-var angle = [0.0, Math.PI, 0.0];
-var cameraPos = [0.0, 0.0, -10.0];
+var angle, cameraPos;
 var viewToWorldMat;
 
 
@@ -57,6 +69,12 @@ function createShader(gl, type, source) {
 
         return error;
 	}
+}
+
+
+function resetCamera() {
+    angle = [0.0, Math.PI, 0.0];
+    cameraPos = [0.0, 0.0, -10.0];
 }
 
 
@@ -115,12 +133,27 @@ function handleMouseMove(evt) {
     angle[1] -= evt.movementY / 300;
 }
 
+function handleKeyDown(evt) {
+    keys[evt.keyCode] = true;
+    evt.preventDefault();
+}
+
+function handleKeyUp(evt) {
+    keys[evt.keyCode] = false;
+    evt.preventDefault();
+}
+
 function changePointerLock() {
     if (document.pointerLockElement === glCanvas ||
         document.mozPointerLockElement === glCanvas) {
         document.addEventListener("mousemove", handleMouseMove, false);
+        document.addEventListener("keydown", handleKeyDown, false);
+        document.addEventListener("keyup", handleKeyUp, false);
     } else {
         document.removeEventListener("mousemove", handleMouseMove, false);
+        document.removeEventListener("keydown", handleKeyDown, false);
+        document.removeEventListener("keyup", handleKeyUp, false);
+        keys = {};
     }
 }
 
@@ -152,6 +185,12 @@ function init() {
     vbo = glContext.createBuffer();
 
     viewToWorldMat = mat4.create();
+    camDisp = vec3.create();
+
+    forwardsVec = vec3.fromValues(0, 0, -1);
+    backwardsVec = vec3.fromValues(0, 0, 1);
+    rightVec = vec3.fromValues(1, 0, 0);
+    leftVec = vec3.fromValues(-1, 0, 0);
 
 	// gl.ARRAY_BUFFER is a 'bind point'
 	// for WebGL, which indicates where
@@ -213,11 +252,43 @@ function getProgramAttribLocations() {
 	timeUniform = glContext.getUniformLocation(program, "time");
 }
 
+function moveCamera() {
+    // Move camera based on current keypresses.
+
+    var movingUp = keys[87] || keys[38];
+    var movingDown = keys[83] || keys[40];
+    var movingLeft = keys[65] || keys[37];
+    var movingRight = keys[68] || keys[39];
+
+    if (movingUp && !movingDown) {
+        vec3.transformMat4(camDisp, forwardsVec, viewToWorldMat);
+        vec3.scale(camDisp, camDisp, deltaTime / 120);
+        vec3.add(cameraPos, cameraPos, camDisp);
+    }
+    if (movingDown && !movingUp) {
+        vec3.transformMat4(camDisp, backwardsVec, viewToWorldMat);
+        vec3.scale(camDisp, camDisp, deltaTime / 120);
+        vec3.add(cameraPos, cameraPos, camDisp);
+    }
+    if (movingLeft && !movingRight) {
+        vec3.transformMat4(camDisp, leftVec, viewToWorldMat);
+        vec3.scale(camDisp, camDisp, deltaTime / 120);
+        vec3.add(cameraPos, cameraPos, camDisp);
+    }
+    if (movingRight && !movingLeft) {
+        vec3.transformMat4(camDisp, rightVec, viewToWorldMat);
+        vec3.scale(camDisp, camDisp, deltaTime / 120);
+        vec3.add(cameraPos, cameraPos, camDisp);
+    }
+}
+
 function render(time) {
     if (program === null) return;
 
-    var currentTime = time - startTime;
-    var deltaTime = time - lastTime;
+    currentTime = time - startTime;
+    deltaTime = time - lastTime;
+
+    moveCamera();
 
     // Tell WebGL to use our shader program.
     glContext.useProgram(program);
@@ -265,6 +336,8 @@ function recompileShader() {
     if (program === null) return;
 
     getProgramAttribLocations();
+
+    resetCamera();
 
     // We now restart the render loop.
     startTime = performance.now();
