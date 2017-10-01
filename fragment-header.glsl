@@ -37,3 +37,7 @@ uniform vec2 screenSize;
 // This stores the current time, i.e. the number
 // of seconds since the program began execution.
 uniform float time;
+
+// This stores the frequency of the audio
+// input, as a 512x1 texture.
+uniform sampler2D frequencyData;

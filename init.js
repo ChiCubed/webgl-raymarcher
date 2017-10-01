@@ -3,9 +3,10 @@ var glContext, glCanvas;
 var vbo;
 // WebGL shader program
 var program = null;
-// Uniforms - values which are constant for each
-// frame we render.
-var cameraPosUniform, viewToWorldUniform, screenSizeUniform, timeUniform;
+// Uniforms - values which are constant during
+// each frame's rendering.
+var cameraPosUniform, viewToWorldUniform, screenSizeUniform,
+    timeUniform, frequencyDataUniform;
 
 var fpsElement;
 
@@ -45,6 +46,14 @@ var vertexSrc = "// Vertex shader source.                    \n"+
 var angle, cameraPos;
 var viewToWorldMat;
 
+// Texture for transmitting audio frequency
+// data.
+var frequencyTexture;
+
+var audioCtx, source, analyser, stream;
+
+var fftResult;
+
 
 function createShader(gl, type, source) {
 	var shader = gl.createShader(type);
@@ -69,12 +78,6 @@ function createShader(gl, type, source) {
 
         return error;
 	}
-}
-
-
-function resetCamera() {
-    angle = [0.0, Math.PI, 0.0];
-    cameraPos = [0.0, 0.0, -10.0];
 }
 
 
@@ -157,6 +160,22 @@ function changePointerLock() {
     }
 }
 
+function resetCamera() {
+    angle = [0.0, Math.PI, 0.0];
+    cameraPos = [0.0, 0.0, -10.0];
+}
+
+function writeToFFTTexture() {
+    // Get data
+    analyser.getByteFrequencyData(fftResult);
+
+    // Write data
+    glContext.bindTexture(glContext.TEXTURE_2D, frequencyTexture);
+    glContext.texImage2D(glContext.TEXTURE_2D, 0, glContext.LUMINANCE,
+                         fftResult.length, 1, 0, glContext.LUMINANCE, glContext.UNSIGNED_BYTE,
+                         fftResult);
+}
+
 // Note: This function is called by load-codemirror.js
 // when all the files have been loaded.
 function init() {
@@ -212,7 +231,38 @@ function init() {
     document.addEventListener("pointerlockchange", changePointerLock, false);
     document.addEventListener("mozpointerlockchange", changePointerLock, false);
 
-    recompileShader();
+    // Web Audio initialisation
+    // https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API/Visualizations_with_Web_Audio_API
+
+    navigator.mediaDevices.getUserMedia({audio: true, video: false})
+        .then(function(stream) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioCtx.createAnalyser();
+
+        // Add getting the stream source here
+
+        source = audioCtx.createMediaStreamSource(stream);
+        source.connect(analyser);
+
+        analyser.fftSize = 1024;
+        var bufferLength = analyser.frequencyBinCount;
+        fftResult = new Uint8Array(bufferLength);
+
+        // Frequency texture initialisation
+        frequencyTexture = glContext.createTexture();
+
+        glContext.bindTexture(glContext.TEXTURE_2D, frequencyTexture);
+
+        glContext.texParameteri(glContext.TEXTURE_2D, glContext.TEXTURE_MIN_FILTER, glContext.NEAREST);
+        glContext.texParameteri(glContext.TEXTURE_2D, glContext.TEXTURE_MAG_FILTER, glContext.NEAREST);
+        glContext.texParameteri(glContext.TEXTURE_2D, glContext.TEXTURE_WRAP_S, glContext.CLAMP_TO_EDGE);
+        glContext.texParameteri(glContext.TEXTURE_2D, glContext.TEXTURE_WRAP_T, glContext.CLAMP_TO_EDGE);
+
+        // Sets the unpack alignment for the data.
+        glContext.pixelStorei(glContext.UNPACK_ALIGNMENT, 1);
+
+        recompileShader();
+    });
 }
 
 function setViewToWorld() {
@@ -250,6 +300,7 @@ function getProgramAttribLocations() {
 	viewToWorldUniform = glContext.getUniformLocation(program, "viewToWorld");
 	screenSizeUniform = glContext.getUniformLocation(program, "screenSize");
 	timeUniform = glContext.getUniformLocation(program, "time");
+    frequencyDataUniform = glContext.getUniformLocation(program, "frequencyData");
 }
 
 function moveCamera() {
@@ -298,11 +349,17 @@ function render(time) {
 
     setViewToWorld();
 
+    writeToFFTTexture();
+
     // Set uniforms.
     glContext.uniform3f(cameraPosUniform, cameraPos[0], cameraPos[1], cameraPos[2]);
     glContext.uniformMatrix4fv(viewToWorldUniform, false, viewToWorldMat);
     glContext.uniform2f(screenSizeUniform, glCanvas.width, glCanvas.height);
     glContext.uniform1f(timeUniform, currentTime / 1000);
+
+    glContext.activeTexture(glContext.TEXTURE0);
+    glContext.bindTexture(glContext.TEXTURE_2D, frequencyTexture);
+    glContext.uniform1i(frequencyDataUniform, 0);
 
     // Actual drawing
     glContext.drawArrays(glContext.TRIANGLES, 0, 6);

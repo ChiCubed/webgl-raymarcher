@@ -16,7 +16,7 @@ const float NORMAL_EPSILON = 0.01;
 const float stepScale = 0.90;
 
 // For material lightings.
-vec3 AMBIENT_COLOUR = vec3(0.0);
+vec3 AMBIENT_COLOUR = vec3(0.05);
 float ambientIntensity = 1.0;
 
 struct HitPoint {
@@ -76,6 +76,12 @@ mat4 transpose(mat4 m) {
 float smin(float a, float b, float k) {
     float h = clamp(0.5 + 0.5*(b-a)/k, 0.0, 1.0);
     return mix(b,a,h) - k*h*(1.0-h);
+}
+
+HitPoint smin(HitPoint a, HitPoint b, float k) {
+    float h = clamp(0.5 + 0.5*(b.dist-a.dist)/k, 0.0, 1.0);
+    return HitPoint(mix(b.dist,a.dist,h)-k*h*(1.0-h),
+                    mix(b.diffuse,a.diffuse,h)-vec3(k*h*(1.0-h)));
 }
 
 // Distance functions.
@@ -239,8 +245,9 @@ vec3 opTrans(vec3 p, mat4 m) {
 
 // Distance function for the scene
 HitPoint scene(vec3 p) {
-    return min(HitPoint(sdSphere(p,1.0),vec3(1,0,0)),
-               HitPoint(sdSphere(p-vec3(1,0,2.0*sin(time)),1.0),vec3(0,0,1)));
+    return smin(HitPoint(sdSphere(p,texture2D(frequencyData, vec2(0.05,0.5)).r+0.5),vec3(1,0,0)),
+                HitPoint(sdSphere(p-vec3(1,0,2.0*sin(time)),1.0),vec3(0,0,1)),
+                0.5);
 }
 
 // Estimate normal at a point
