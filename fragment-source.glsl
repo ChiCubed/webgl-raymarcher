@@ -78,6 +78,8 @@ float smin(float a, float b, float k) {
     return mix(b,a,h) - k*h*(1.0-h);
 }
 
+// Smooth minimum for HitPoints.
+// Attempts to do some sort of colour blending...
 HitPoint smin(HitPoint a, HitPoint b, float k) {
     float h = clamp(0.5 + 0.5*(b.dist-a.dist)/k, 0.0, 1.0);
     return HitPoint(mix(b.dist,a.dist,h)-k*h*(1.0-h),
@@ -232,9 +234,9 @@ mat4 invertTrans(mat4 m) {
     // transformation matrix.
     mat3 R = transpose(mat3(m));
     vec3 t = -R*vec3(m[3][0],m[3][1],m[3][2]);
-    return mat4(R[0][0], R[1][0], R[2][0], t[0],
-                R[0][1], R[1][1], R[2][1], t[1],
-                R[0][2], R[1][2], R[2][2], t[2],
+    return mat4(R[0][0], R[0][1], R[0][2], t[0],
+                R[1][0], R[1][1], R[1][2], t[1],
+                R[2][0], R[2][1], R[2][2], t[2],
                       0,       0,       0,    1);
 }
 
