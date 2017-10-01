@@ -176,6 +176,16 @@ function writeToFFTTexture() {
                          fftResult);
 }
 
+
+function resizeCanvas(width, height) {
+    // Resizes the canvas.
+    glCanvas.width = width;
+    glCanvas.height = height;
+    glCanvas.style.maxWidth = width;
+
+    glContext.viewport(0, 0, width, height);
+}
+
 // Note: This function is called by load-codemirror.js
 // when all the files have been loaded.
 function init() {
@@ -236,7 +246,8 @@ function init() {
 
     navigator.mediaDevices.getUserMedia({audio: true, video: false})
         .then(function(stream) {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        var AudioContext = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AudioContext();
         analyser = audioCtx.createAnalyser();
 
         // Add getting the stream source here
