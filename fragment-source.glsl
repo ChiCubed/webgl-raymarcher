@@ -247,9 +247,15 @@ vec3 opTrans(vec3 p, mat4 m) {
 
 // Distance function for the scene
 HitPoint scene(vec3 p) {
-    return smin(HitPoint(sdSphere(p,texture2D(frequencyData, vec2(0.05,0.5)).r+0.5),vec3(1,0,0)),
-                HitPoint(sdSphere(p-vec3(1,0,2.0*sin(time)),1.0),vec3(0,0,1)),
-                0.5);
+    // equalizer
+    HitPoint res = HitPoint(FAR_DIST, vec3(0.0));
+    const float distPerBar = 1.0 / 24.0;
+    for (float i = distPerBar * 0.5; i < 1.0; i += distPerBar) {
+        res = smin(res, HitPoint(sdSphere(p - vec3(i,-texture2D(frequencyData,vec2(i,0.5)).r,0.0), distPerBar),
+                                 vec3(1,0,1)), 0.1);
+    }
+
+    return res;
 }
 
 // Estimate normal at a point
