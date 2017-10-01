@@ -65,7 +65,6 @@ mat4 transpose(mat4 m) {
                 m[0][3], m[1][3], m[2][3], m[3][3]);
 }
 
-
 // Smooth minimum.
 // Can be used to 'blend' objects.
 // http://www.iquilezles.org/www/articles/smin/smin.htm
@@ -83,7 +82,7 @@ float smin(float a, float b, float k) {
 HitPoint smin(HitPoint a, HitPoint b, float k) {
     float h = clamp(0.5 + 0.5*(b.dist-a.dist)/k, 0.0, 1.0);
     return HitPoint(mix(b.dist,a.dist,h)-k*h*(1.0-h),
-                    mix(b.diffuse,a.diffuse,h)-vec3(k*h*(1.0-h)));
+                    mix(b.diffuse,a.diffuse,smoothstep(0.0,1.0,h)));
 }
 
 // Distance functions.
@@ -251,8 +250,8 @@ HitPoint scene(vec3 p) {
     HitPoint res = HitPoint(FAR_DIST, vec3(0.0));
     const float distPerBar = 1.0 / 24.0;
     for (float i = distPerBar * 0.5; i < 1.0; i += distPerBar) {
-        res = smin(res, HitPoint(sdSphere(p - vec3(i,-texture2D(frequencyData,vec2(i,0.5)).r,0.0), distPerBar),
-                                 vec3(1,0,1)), 0.1);
+        res = smin(res, HitPoint(sdSphere(p - vec3(i,-texture2D(frequencyData,vec2(i,0.5)).r,0.0),distPerBar*1.5),
+                                 mix(vec3(i,1.0-i,0.0),vec3(i,0.0,1.0-i),sin(time)*0.5+0.5)), 0.05);
     }
 
     return res;
