@@ -8,7 +8,7 @@ var program = null;
 var cameraPosUniform, viewToWorldUniform, screenSizeUniform,
     timeUniform, frequencyDataUniform;
 
-var fpsElement;
+var fpsElement, audioElement, audioFileInput;
 
 // ID of next frame to render.
 var nextRenderFrame = null;
@@ -50,7 +50,10 @@ var viewToWorldMat;
 // data.
 var frequencyTexture;
 
+var AudioContext;
 var audioCtx, source, analyser, stream;
+
+var microphoneSource, audioElementSource;
 
 var fftResult;
 
@@ -186,11 +189,38 @@ function resizeCanvas(width, height) {
     glContext.viewport(0, 0, width, height);
 }
 
+function changeAudioInput(inputMethod) {
+    if (inputMethod == 'microphone') {
+        navigator.mediaDevices.getUserMedia({audio: true, video: false})
+            .then(function(stream) {
+            source.disconnect();
+            analyser.disconnect();
+
+            source = microphoneSource;
+            source.connect(analyser);
+        });
+        audioElement.pause();
+        audioElement.src = '';
+    } else if (inputMethod == 'file') {
+        console.log(audioFileInput.files);
+        audioElement.src = URL.createObjectURL(audioFileInput.files[0]);
+
+        source.disconnect();
+        analyser.disconnect();
+
+        source = audioElementSource;
+        source.connect(analyser);
+        analyser.connect(audioCtx.destination);
+    }
+}
+
 // Note: This function is called by load-codemirror.js
 // when all the files have been loaded.
 function init() {
 	glCanvas = document.getElementById('gl-canvas');
     fpsElement = document.getElementById('fps-counter');
+    audioElement = document.getElementById('audio-player');
+    audioFileInput = document.getElementById('audio-file');
 
 	// Get WebGL context.
 	glContext = glCanvas.getContext('webgl') || glCanvas.getContext('experimental-webgl');
@@ -244,15 +274,17 @@ function init() {
     // Web Audio initialisation
     // https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API/Visualizations_with_Web_Audio_API
 
+    AudioContext = window.AudioContext || window.webkitAudioContext;
+
     navigator.mediaDevices.getUserMedia({audio: true, video: false})
         .then(function(stream) {
-        var AudioContext = window.AudioContext || window.webkitAudioContext;
         audioCtx = new AudioContext();
         analyser = audioCtx.createAnalyser();
 
-        // Add getting the stream source here
+        microphoneSource = audioCtx.createMediaStreamSource(stream);
+        audioElementSource = audioCtx.createMediaElementSource(audioElement);
 
-        source = audioCtx.createMediaStreamSource(stream);
+        source = microphoneSource;
         source.connect(analyser);
 
         analyser.fftSize = 1024;

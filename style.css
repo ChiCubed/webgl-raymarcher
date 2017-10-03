@@ -75,7 +75,29 @@ p.subtitle {
     cursor: pointer;
 }
 
-button {
+.audio-wrapper {
+    font-size: 13px;
+    font-family: Roboto;
+
+    color: white;
+
+    text-align: center;
+    margin: 10px;
+}
+
+.audio-wrapper audio {
+    margin: auto;
+    vertical-align: middle;
+}
+
+span.info-text {
+    color: white;
+
+    font-size: 13px;
+    font-family: Roboto;
+}
+
+button, .btn {
 	background-color: black;
 	color: white;
 	border: 1px solid white;
@@ -88,22 +110,52 @@ button {
 	border-radius: 5px;
 }
 
-button:hover {
+button:hover, .btn:hover {
 	color: lightblue;
 	cursor: pointer;
 }
 
-button:active {
+button:active, .btn:active {
 	border-color: lightblue;
 }
 
-button.center {
+button.center, .btn.center {
 	margin: 10px auto;
 	display: block;
 }
 
-button:focus {
+button:focus, .btn:focus {
 	outline: none;
+}
+
+.btn-file {
+    position: relative;
+    overflow: hidden;
+
+    display: inline-block;
+    vertical-align: top;
+}
+
+.btn-file input[type=file] {
+    display: none;
+}
+
+nav {
+    text-align: center;
+}
+
+nav > .btn, nav > * {
+    border-radius: 0px;
+}
+
+nav > .btn:first-child, nav > *:first-child {
+    border-top-left-radius: 5px;
+    border-bottom-left-radius: 5px;
+}
+
+nav > .btn:last-child, nav > *:last-child {
+    border-top-right-radius: 5px;
+    border-bottom-right-radius: 5px;
 }
 
 .CodeMirror {

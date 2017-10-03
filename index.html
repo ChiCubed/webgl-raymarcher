@@ -42,6 +42,18 @@
             <p id="fps-counter" style="text-align: center"></p>
 		</div>
 		<button class="center" onclick="recompileShader()">Recompile shader code</button>
+        <div class="audio-wrapper">
+            Audio Player:
+            <audio id="audio-player" controls></audio>
+        </div>
+        <nav>
+            <span class="info-text">Select audio input method:</span>
+            <button onclick="changeAudioInput('microphone')">Microphone</button>
+            <label class="btn btn-file">
+                Local File
+                <input type="file" id="audio-file" accept="audio/*" onchange="changeAudioInput('file')"/>
+            </label>
+        </nav>
 		<div id="codemirror-container"></div>
 	</body>
 </html>
