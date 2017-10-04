@@ -12,7 +12,7 @@ const float NEAR_DIST = 0.01;
 const float FAR_DIST = 256.0;
 float FOV = 45.0;
 const float EPSILON = 0.001;
-const float NORMAL_EPSILON = 0.01;
+const float NORMAL_EPSILON = 0.001;
 const float stepScale = 0.90;
 
 const float M_PI = 3.14159265358979323846;
@@ -341,7 +341,7 @@ HitPoint scene(vec3 p) {
     HitPoint res = HitPoint(FAR_DIST, vec3(0.0));
 
     // Create a disc
-    res = min(res, HitPoint(smax(abs(p.y + 0.2) - 0.2, length(p.xz) - 3.0, 0.2) + cnoise(20.0*p)*0.005,
+    res = min(res, HitPoint(smax(abs(p.y + 0.2) - 0.2, length(p.xz) - 3.0, 0.2) + cnoise(25.0*p)*0.004,
                             vec3(1.0)));
 
     // Add a central bar

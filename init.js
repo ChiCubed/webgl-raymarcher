@@ -202,7 +202,7 @@ function changeAudioInput(inputMethod) {
     } else if (inputMethod == 'file') {
         audioElement.src = URL.createObjectURL(audioFileInput.files[0]);
 
-        source.disconnect();
+        if (source !== null) source.disconnect();
         analyser.disconnect();
 
         source = audioElementSource;
