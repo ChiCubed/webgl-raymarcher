@@ -51,9 +51,9 @@ var viewToWorldMat;
 var frequencyTexture;
 
 var AudioContext;
-var audioCtx, source, analyser, stream;
+var audioCtx, source = null, analyser, stream;
 
-var microphoneSource, audioElementSource;
+var audioElementSource;
 
 var fftResult;
 
@@ -191,10 +191,11 @@ function changeAudioInput(inputMethod) {
     if (inputMethod == 'microphone') {
         navigator.mediaDevices.getUserMedia({audio: true, video: false})
             .then(function(stream) {
-            source.disconnect();
+            if (source !== null)
+                source.disconnect();
             analyser.disconnect();
 
-            source = microphoneSource;
+            source = audioCtx.createMediaStreamSource(stream);
             source.connect(analyser);
         });
         audioElement.src = '';
@@ -287,36 +288,31 @@ function init() {
 
     AudioContext = window.AudioContext || window.webkitAudioContext;
 
-    navigator.mediaDevices.getUserMedia({audio: true, video: false})
-        .then(function(stream) {
-        audioCtx = new AudioContext();
-        analyser = audioCtx.createAnalyser();
+    audioCtx = new AudioContext();
+    analyser = audioCtx.createAnalyser();
 
-        microphoneSource = audioCtx.createMediaStreamSource(stream);
-        audioElementSource = audioCtx.createMediaElementSource(audioElement);
+    audioElementSource = audioCtx.createMediaElementSource(audioElement);
 
-        source = microphoneSource;
-        source.connect(analyser);
+    analyser.fftSize = 1024;
+    var bufferLength = analyser.frequencyBinCount;
+    fftResult = new Uint8Array(bufferLength);
 
-        analyser.fftSize = 1024;
-        var bufferLength = analyser.frequencyBinCount;
-        fftResult = new Uint8Array(bufferLength);
+    // Frequency texture initialisation
+    frequencyTexture = glContext.createTexture();
 
-        // Frequency texture initialisation
-        frequencyTexture = glContext.createTexture();
+    glContext.bindTexture(glContext.TEXTURE_2D, frequencyTexture);
 
-        glContext.bindTexture(glContext.TEXTURE_2D, frequencyTexture);
+    glContext.texParameteri(glContext.TEXTURE_2D, glContext.TEXTURE_MIN_FILTER, glContext.NEAREST);
+    glContext.texParameteri(glContext.TEXTURE_2D, glContext.TEXTURE_MAG_FILTER, glContext.NEAREST);
+    glContext.texParameteri(glContext.TEXTURE_2D, glContext.TEXTURE_WRAP_S, glContext.CLAMP_TO_EDGE);
+    glContext.texParameteri(glContext.TEXTURE_2D, glContext.TEXTURE_WRAP_T, glContext.CLAMP_TO_EDGE);
 
-        glContext.texParameteri(glContext.TEXTURE_2D, glContext.TEXTURE_MIN_FILTER, glContext.NEAREST);
-        glContext.texParameteri(glContext.TEXTURE_2D, glContext.TEXTURE_MAG_FILTER, glContext.NEAREST);
-        glContext.texParameteri(glContext.TEXTURE_2D, glContext.TEXTURE_WRAP_S, glContext.CLAMP_TO_EDGE);
-        glContext.texParameteri(glContext.TEXTURE_2D, glContext.TEXTURE_WRAP_T, glContext.CLAMP_TO_EDGE);
+    // Sets the unpack alignment for the data.
+    glContext.pixelStorei(glContext.UNPACK_ALIGNMENT, 1);
 
-        // Sets the unpack alignment for the data.
-        glContext.pixelStorei(glContext.UNPACK_ALIGNMENT, 1);
+    changeAudioInput('microphone');
 
-        recompileShader();
-    });
+    recompileShader();
 }
 
 function setViewToWorld() {
