@@ -77,6 +77,11 @@ float smin(float a, float b, float k) {
     return mix(b,a,h) - k*h*(1.0-h);
 }
 
+float smax(float a, float b, float k) {
+    float h = clamp(0.5 + 0.5*(b-a)/k, 0.0, 1.0);
+    return mix(a,b,h) + k*h*(1.0-h);
+}
+
 // Smooth minimum for HitPoints.
 // Attempts to do some sort of colour blending...
 HitPoint smin(HitPoint a, HitPoint b, float k) {
@@ -259,7 +264,7 @@ HitPoint scene(vec3 p) {
     HitPoint res = HitPoint(FAR_DIST, vec3(0.0));
 
     // Create a disc
-    res = min(res, HitPoint(max(abs(p.y), length(p.xz) - 2.0), vec3(1.0)));
+    res = min(res, HitPoint(smax(abs(p.y + 0.2) - 0.2, length(p.xz) - 2.0, 0.2), vec3(1.0)));
 
     // Add a central bar
     float bass = texture2D(frequencyData, vec2(0.1, 0.5)).x;
