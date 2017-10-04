@@ -10,7 +10,7 @@ const int MAX_MARCH_STEPS = 128;
 const int MAX_SHADOW_MARCH_STEPS = 64;
 const float NEAR_DIST = 0.01;
 const float FAR_DIST = 256.0;
-float FOV = 45.0;
+float FOV = 60.0;
 const float EPSILON = 0.001;
 const float NORMAL_EPSILON = 0.001;
 const float stepScale = 0.90;
@@ -45,6 +45,8 @@ HitPoint max(HitPoint a, HitPoint b) {
 
 // Perlin noise.
 // https://gist.github.com/patriciogonzalezvivo/670c22f3966e662d2f83
+// As far as I can tell, this version is a derivative of
+// https://github.com/stegu/webgl-noise/blob/master/src/classicnoise3D.glsl
 
 vec4 permute(vec4 x) {return mod(((x*34.0)+1.0)*x, 289.0);}
 vec4 taylorInvSqrt(vec4 r) {return 1.79284291400159 - 0.85373472095314 * r;}
@@ -336,16 +338,15 @@ mat3 rotateY(float x) {
     );
 }
 
-// Distance function for the scene
-HitPoint scene(vec3 p) {
-    HitPoint res = HitPoint(FAR_DIST, vec3(0.0));
-
+// Helper distance function
+HitPoint spectrogramDisc(vec3 p) {
     // Create a disc
-    res = min(res, HitPoint(smax(abs(p.y + 0.2) - 0.2, length(p.xz) - 3.0, 0.2) + cnoise(25.0*p)*0.004,
-                            vec3(1.0)));
+    HitPoint res = HitPoint(smax(abs(p.y + 0.2)-0.2, length(p.xz)-3.0, 0.2) + cnoise(25.0*p)*0.003,
+                            vec3(1.0));
+
+    float bass = texture2D(frequencyData, vec2(0.1, 0.5)).x;
 
     // Add a central bar
-    float bass = texture2D(frequencyData, vec2(0.1, 0.5)).x;
     res = smin(res, HitPoint(udRoundBox(rotateY(time) * p - vec3(0, bass, 0),
                                         vec3(bass*0.3, bass, bass*0.3),
                                         bass*0.2),
@@ -362,8 +363,22 @@ HitPoint scene(vec3 p) {
         res = min(res, HitPoint(udRoundBox(rotateY(i * 6.283185307) * p - unrotatedPos,
                                            boxSize,
                                            inc),
-                                vec3(1.0 - i, i, 0)));
+                                 vec3(1.0 - i, i, 0)));
     }
+
+    return res;
+}
+
+// Distance function for the scene
+HitPoint scene(vec3 p) {
+    HitPoint res = spectrogramDisc(p);
+
+    // column
+    res = min(res, HitPoint(max(p.y+0.1,length(p.xz)-1.0), vec3(1)));
+
+    // landscape
+    res = min(res, HitPoint(cnoise(p*0.05-vec3(time*0.2,0,0))*5.0 + p.y + 10.0,
+                            vec3((p.y+14.0)*0.25,(p.y+12.0)*0.4,1)));
 
     return res;
 }
@@ -371,12 +386,23 @@ HitPoint scene(vec3 p) {
 // Estimate normal at a point
 // for lighting calcs
 vec3 estimateNormal(vec3 p) {
-    vec2 eps = vec2(NORMAL_EPSILON, 0.0);
+    const vec2 eps = vec2(1.0, -1.0) * NORMAL_EPSILON;
+
+    return normalize(
+        eps.xyy * scene(p+eps.xyy).dist +
+        eps.yyx * scene(p+eps.yyx).dist +
+        eps.yxy * scene(p+eps.yxy).dist +
+        eps.xxx * scene(p+eps.xxx).dist
+    );
+
+    /*
+    const vec2 eps = vec2(1.0, 0.0) * NORMAL_EPSILON;
     return normalize(vec3(
         scene(p+eps.xyy).dist - scene(p-eps.xyy).dist,
         scene(p+eps.yxy).dist - scene(p-eps.yxy).dist,
         scene(p+eps.yyx).dist - scene(p-eps.yyx).dist)
     );
+    */
 }
 
 HitPoint march(vec3 ro, vec3 rd, float near, float far) {
@@ -537,10 +563,10 @@ vec3 lighting(vec3 ambient_col, vec3 diffuse_col, vec3 specular_col,
     colour += tmp;
 
     // directional lighting
-    const vec3 lightDirection = normalize(vec3(1,-1,0));
+    const vec3 lightDirection = normalize(vec3(0.5,-1,0));
 
     tmp = directionalPhongLighting(diffuse_col, specular_col, alpha, p, normal, cam,
-                                   viewerNormal, lightDirection, vec3(1, 0.6, 0), 0.3);
+                                   viewerNormal, lightDirection, vec3(1, 0.6, 0), 0.4);
 
     if (tmp != vec3(0.0)) {
         // We arbitrarily set the
@@ -591,7 +617,7 @@ void main() {
     // Calculate ray direction.
     // gl_FragCoord.xy is the position of the
     // pixel in screen space.
-    vec3 rayDir = direction(FOV + bass*5.0, gl_FragCoord.xy, screenSize);
+    vec3 rayDir = direction(FOV - bass*10.0, gl_FragCoord.xy, screenSize);
 
     // Convert the ray direction to world coordinates.
     vec3 worldRayDir = vec3(viewToWorld * vec4(rayDir,1));
@@ -605,6 +631,12 @@ void main() {
                                4.0, cameraPos + worldRayDir*result.dist, cameraPos, ambientIntensity);
         gl_FragColor = vec4(colour,1);
     } else {
-        gl_FragColor = vec4(0,0,0,1);
+        vec3 skyColour = vec3(0.1, 0.6, 1.0) * (worldRayDir.y*0.2 + 0.8);
+
+        // sun
+        const vec3 toSun = normalize(vec3(-0.5, 1.0, 0.0));
+        skyColour += vec3(1.0, 0.5, 0.0) * clamp(1.0 - length(toSun - worldRayDir), 0.0, 1.0);
+
+        gl_FragColor = vec4(clamp(skyColour,vec3(0),vec3(1)),1);
     }
 }
