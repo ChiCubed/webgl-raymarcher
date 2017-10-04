@@ -199,10 +199,8 @@ function changeAudioInput(inputMethod) {
             source = microphoneSource;
             source.connect(analyser);
         });
-        audioElement.pause();
         audioElement.src = '';
     } else if (inputMethod == 'file') {
-        console.log(audioFileInput.files);
         audioElement.src = URL.createObjectURL(audioFileInput.files[0]);
 
         source.disconnect();
@@ -221,6 +219,21 @@ function init() {
     fpsElement = document.getElementById('fps-counter');
     audioElement = document.getElementById('audio-player');
     audioFileInput = document.getElementById('audio-file');
+
+    audioFileInput.onchange = function() {
+        changeAudioInput('file');
+
+        // This ensures that the
+        // onchange selector will
+        // execute even if the same
+        // file is selected twice,
+        // e.g.:
+        // select a file,
+        // change audio input,
+        // select the same file.
+        this.value = null;
+        return false;
+    };
 
 	// Get WebGL context.
 	glContext = glCanvas.getContext('webgl') || glCanvas.getContext('experimental-webgl');
