@@ -108,11 +108,17 @@ button, .btn {
 
 	padding: 5px;
 	border-radius: 5px;
+
+    -webkit-transition: padding 0.2s ease;
+            transition: padding 0.2s ease;
 }
 
 button:hover, .btn:hover {
 	color: lightblue;
 	cursor: pointer;
+
+    padding-left: 10px;
+    padding-right: 10px;
 }
 
 button:active, .btn:active {

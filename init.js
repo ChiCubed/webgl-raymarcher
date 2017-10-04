@@ -133,9 +133,7 @@ function generateProgramFromSources(vertSrc, fragSrc) {
 
 
 function handleMouseMove(evt) {
-    angle[0] += evt.movementX / 300;
-    // We subtract instead of adding
-    // since the y-axis is inverted
+    angle[0] -= evt.movementX / 300;
     angle[1] -= evt.movementY / 300;
 }
 
@@ -164,8 +162,8 @@ function changePointerLock() {
 }
 
 function resetCamera() {
-    angle = [0.0, Math.PI, 0.0];
-    cameraPos = [0.0, 0.0, -10.0];
+    angle = [Math.PI, -0.2, 0.0];
+    cameraPos = [0.0, 3.0, -10.0];
 }
 
 function writeToFFTTexture() {

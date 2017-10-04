@@ -244,14 +244,42 @@ vec3 opTrans(vec3 p, mat4 m) {
     return vec3(invertTrans(m)*vec4(p,1.0));
 }
 
+mat3 rotateY(float x) {
+    float c = cos(x);
+    float s = sin(x);
+    return mat3(
+          c, 0.0,  -s,
+        0.0, 1.0, 0.0,
+          s, 0.0,   c
+    );
+}
+
 // Distance function for the scene
 HitPoint scene(vec3 p) {
-    // equalizer
     HitPoint res = HitPoint(FAR_DIST, vec3(0.0));
-    const float distPerBar = 1.0 / 24.0;
-    for (float i = distPerBar * 0.5; i < 1.0; i += distPerBar) {
-        res = smin(res, HitPoint(sdSphere(p - vec3(i,-texture2D(frequencyData,vec2(i,0.5)).r,0.0),distPerBar*1.5),
-                                 mix(vec3(i,1.0-i,0.0),vec3(i,0.0,1.0-i),sin(time)*0.5+0.5)), 0.05);
+
+    // Create a disc
+    res = min(res, HitPoint(max(abs(p.y), length(p.xz) - 2.0), vec3(1.0)));
+
+    // Add a central bar
+    float bass = texture2D(frequencyData, vec2(0.1, 0.5)).x;
+    res = min(res, HitPoint(udRoundBox(rotateY(time) * p - vec3(0, bass, 0),
+                                        vec3(bass*0.3, bass, bass*0.3),
+                                        bass*0.2),
+                             vec3(1, 0, 0)));
+
+    // Circular equalizer
+    const float inc = 1.0 / 20.0;
+    for (float i = 0.0; i < 1.0; i += inc) {
+        float height = texture2D(frequencyData, vec2(i, 0.5)).x;
+
+        vec3 unrotatedPos = vec3(1.0, height, 0);
+        vec3 boxSize = vec3(inc, height, inc);
+
+        res = min(res, HitPoint(udRoundBox(rotateY(i * 6.283185307) * p - unrotatedPos,
+                                           boxSize,
+                                           inc),
+                                vec3(1.0 - i, i, 0)));
     }
 
     return res;
@@ -403,10 +431,10 @@ vec3 lighting(vec3 ambient_col, vec3 diffuse_col, vec3 specular_col,
     vec3 viewerNormal = normalize(cam - p);
 
     // point lighting
-    vec3 lightPos = vec3(0,0,-10);
+    const vec3 lightPos = vec3(0,3,0);
 
     vec3 tmp = phongLighting(diffuse_col, specular_col, alpha, p, normal, cam,
-                             viewerNormal, lightPos, vec3(1,1,1), 1.0, 0.0025);
+                             viewerNormal, lightPos, vec3(1,1,1), 0.5, 0.0025);
 
     // if the point is lit at all:
     if (tmp != vec3(0.0)) {
@@ -426,20 +454,23 @@ vec3 lighting(vec3 ambient_col, vec3 diffuse_col, vec3 specular_col,
     colour += tmp;
 
     // directional lighting
-    // vec3 tmp = directionalPhongLighting(diffuse_col, specular_col, alpha, p, normal, cam, viewerNormal, DIRECTION, COLOUR, INTENSITY);
-    //
-    // if (tmp != vec3(0.0)) {
-    //     // We arbitrarily set the
-    //     // 'far' plane to 100,
-    //     // so if an object is not
-    //     // in shadow within 100
-    //     // units it is not
-    //     // in shadow at all.
-    //     tmp *= shadow(p - DIRECTION*EPSILON*2.0,
-    //                   -DIRECTION, EPSILON*2.0, 100.0, 8.0);
-    // }
-    //
-    // colour += tmp;
+    const vec3 lightDirection = normalize(vec3(1,-1,0));
+
+    tmp = directionalPhongLighting(diffuse_col, specular_col, alpha, p, normal, cam,
+                                   viewerNormal, lightDirection, vec3(1, 0.6, 0), 0.3);
+
+    if (tmp != vec3(0.0)) {
+        // We arbitrarily set the
+        // 'far' plane to 100,
+        // so if an object is not
+        // in shadow within 100
+        // units it is not
+        // in shadow at all.
+        tmp *= shadow(p - lightDirection*EPSILON*2.0,
+                      -lightDirection, EPSILON*2.0, 100.0, 8.0);
+    }
+
+    colour += tmp;
 
 	return colour;
 }
@@ -470,10 +501,14 @@ vec3 direction(float fov, vec2 coord, vec2 size) {
 }
 
 void main() {
+    // For fun, let's make the FOV pulsate
+    // based on the amount of bass.
+    float bass = texture2D(frequencyData, vec2(0.1, 0.5)).x;
+
     // Calculate ray direction.
     // gl_FragCoord.xy is the position of the
     // pixel in screen space.
-    vec3 rayDir = direction(FOV, gl_FragCoord.xy, screenSize);
+    vec3 rayDir = direction(FOV + bass*5.0, gl_FragCoord.xy, screenSize);
 
     // Convert the ray direction to world coordinates.
     vec3 worldRayDir = vec3(viewToWorld * vec4(rayDir,1));
