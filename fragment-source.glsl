@@ -328,6 +328,16 @@ vec3 opTrans(vec3 p, mat4 m) {
     return vec3(invertTrans(m)*vec4(p,1.0));
 }
 
+mat3 rotateX(float x) {
+    float c = cos(x);
+    float s = sin(x);
+    return mat3(
+        1.0, 0.0, 0.0,
+        0.0,   c,   s,
+        0.0,  -s,   c
+    );
+}
+
 mat3 rotateY(float x) {
     float c = cos(x);
     float s = sin(x);
@@ -528,6 +538,10 @@ vec3 directionalPhongLighting(vec3 diffuse_col, vec3 specular_col, float alpha,
 	return (diffuse_col*dotLN + specular_col*calculated_specular)*lightColour*intensity;
 }
 
+
+vec3 sunDir; // A global variable for the sun light's direction.
+
+
 // This function calculates the colour of a pixel according to
 // the lighting and its diffuse colour.
 vec3 lighting(vec3 ambient_col, vec3 diffuse_col, vec3 specular_col,
@@ -562,22 +576,28 @@ vec3 lighting(vec3 ambient_col, vec3 diffuse_col, vec3 specular_col,
 
     colour += tmp;
 
-    // directional lighting
-    const vec3 lightDirection = normalize(vec3(0.5,-1,0));
-
+    // directional lighting: sun
     tmp = directionalPhongLighting(diffuse_col, specular_col, alpha, p, normal, cam,
-                                   viewerNormal, lightDirection, vec3(1, 0.6, 0), 0.4);
+                                   viewerNormal, sunDir, vec3(1, 0.6, 0), 0.4);
 
-    if (tmp != vec3(0.0)) {
-        // We arbitrarily set the
-        // 'far' plane to 100,
-        // so if an object is not
-        // in shadow within 100
-        // units it is not
-        // in shadow at all.
-        tmp *= shadow(p - lightDirection*EPSILON*2.0,
-                      -lightDirection, EPSILON*2.0, 100.0, 8.0);
-    }
+    // We arbitrarily set the
+    // 'far' plane to FAR_DIST,
+    // so if an object is not
+    // in shadow within FAR_DIST
+    // units it is not
+    // in shadow at all.
+    tmp *= shadow(p - sunDir*EPSILON*2.0,
+                  -sunDir, EPSILON*2.0, FAR_DIST, 8.0);
+
+    colour += tmp;
+
+    // moon:
+    // direction is the negation of sunDir
+    tmp = directionalPhongLighting(diffuse_col, specular_col, alpha, p, normal, cam,
+                                   viewerNormal, -sunDir, vec3(0.9, 0.9, 1), 0.1);
+
+    tmp *= shadow(p + sunDir*EPSILON*2.0,
+                  sunDir, EPSILON*2.0, FAR_DIST, 8.0);
 
     colour += tmp;
 
@@ -610,6 +630,9 @@ vec3 direction(float fov, vec2 coord, vec2 size) {
 }
 
 void main() {
+    sunDir = rotateX(time*0.1)*vec3(0.0, -1.0, 0.0);
+
+
     // For fun, let's make the FOV pulsate
     // based on the amount of bass.
     float bass = texture2D(frequencyData, vec2(0.1, 0.5)).x;
@@ -631,11 +654,14 @@ void main() {
                                4.0, cameraPos + worldRayDir*result.dist, cameraPos, ambientIntensity);
         gl_FragColor = vec4(colour,1);
     } else {
-        vec3 skyColour = vec3(0.1, 0.6, 1.0) * (worldRayDir.y*0.2 + 0.8);
-
+        vec3 skyColour = clamp(vec3(0.1,0.6,1.0)*(worldRayDir.y*0.2+0.8)*(-sunDir.y), vec3(0.0), vec3(1.0));
         // sun
-        const vec3 toSun = normalize(vec3(-0.5, 1.0, 0.0));
-        skyColour += vec3(1.0, 0.5, 0.0) * clamp(1.0 - length(toSun - worldRayDir), 0.0, 1.0);
+        skyColour += vec3(1.0, 0.5, 0.0) * clamp(1.0 - length(-sunDir-worldRayDir), 0.0, 0.5);
+
+        // moon
+        float moonIntensity = 1.0 - length(sunDir-worldRayDir);
+        moonIntensity = pow(moonIntensity, 5.0);
+        skyColour += vec3(0.9, 0.9, 1.0) * clamp(moonIntensity, 0.0, 1.0);
 
         gl_FragColor = vec4(clamp(skyColour,vec3(0),vec3(1)),1);
     }
