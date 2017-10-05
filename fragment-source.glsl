@@ -5,6 +5,8 @@
 // getting your hands dirty, mess with the
 // 'scene' function.
 
+precision mediump float;
+
 // Some raymarching constants.
 const int MAX_MARCH_STEPS = 128;
 const int MAX_SHADOW_MARCH_STEPS = 64;
@@ -348,10 +350,23 @@ mat3 rotateY(float x) {
     );
 }
 
-// Helper distance function
+// A couple helper distance functions
+// r is radius, y is y-position, t is thickness
+// e is edge radius (where applicable)
+// disc is just a variant of sdCappedCylinder
+
+float disc(vec3 p, float r, float y, float t) {
+    return max(abs(p.y - y) - t, length(p.xz) - r);
+}
+
+float roundedDisc(vec3 p, float r, float y, float t, float e) {
+    return smax(abs(p.y - y) - t, length(p.xz) - r, e);
+}
+
+// Another helper distance function
 HitPoint spectrogramDisc(vec3 p) {
     // Create a disc
-    HitPoint res = HitPoint(smax(abs(p.y + 0.2)-0.2, length(p.xz)-3.0, 0.2) + cnoise(25.0*p)*0.003,
+    HitPoint res = HitPoint(roundedDisc(p, 3.0, -0.2, 0.2, 0.2) + cnoise(25.0*p)*0.003,
                             vec3(1.0));
 
     float bass = texture2D(frequencyData, vec2(0.1, 0.5)).x;
@@ -382,6 +397,14 @@ HitPoint spectrogramDisc(vec3 p) {
 // Distance function for the scene
 HitPoint scene(vec3 p) {
     HitPoint res = spectrogramDisc(p);
+
+    // barrier
+    for (float i = 0.0; i < 6.283185307; i += 1.047197551) {
+        res = min(res, HitPoint(sdCappedCylinder(rotateY(i) * p - vec3(2.7,0.5,0),vec2(0.1,0.5)),
+                                vec3(1)));
+    }
+
+    res = smin(res, HitPoint(sdTorus(p - vec3(0, 1.0, 0), vec2(2.7,0.15)), vec3(1)), 0.3);
 
     // column
     res = min(res, HitPoint(max(p.y+0.1,length(p.xz)-1.0), vec3(1)));
@@ -586,7 +609,7 @@ vec3 lighting(vec3 ambient_col, vec3 diffuse_col, vec3 specular_col,
     // in shadow within FAR_DIST
     // units it is not
     // in shadow at all.
-    tmp *= shadow(p - sunDir*EPSILON*2.0,
+    tmp *= shadow(p + normal*EPSILON*2.0,
                   -sunDir, EPSILON*2.0, FAR_DIST, 8.0);
 
     colour += tmp;
@@ -596,7 +619,7 @@ vec3 lighting(vec3 ambient_col, vec3 diffuse_col, vec3 specular_col,
     tmp = directionalPhongLighting(diffuse_col, specular_col, alpha, p, normal, cam,
                                    viewerNormal, -sunDir, vec3(0.9, 0.9, 1), 0.1);
 
-    tmp *= shadow(p + sunDir*EPSILON*2.0,
+    tmp *= shadow(p + normal*EPSILON*2.0,
                   sunDir, EPSILON*2.0, FAR_DIST, 8.0);
 
     colour += tmp;
