@@ -476,8 +476,10 @@ HitPoint scene(vec3 p) {
     res = min(res, HitPoint(max(p.y+0.1,length(p.xz)-1.0), vec3(1)));
 
     // landscape
-    res = min(res, HitPoint(cnoise(p*0.02-vec3(time*0.2,0,0))*10.0 + p.y + 10.0,
-                            vec3((p.y+14.0)*0.25,(p.y+12.0)*0.4,1)));
+    // very slow: removed
+    // res = min(res, HitPoint(cnoise(p*0.02-vec3(time*0.2,0,0))*10.0 + p.y + 10.0,
+    //                         vec3((p.y+14.0)*0.25,(p.y+12.0)*0.4,1)));
+    res = min(res, HitPoint(p.y + 10.0, vec3(1.0, 1.0, 1.0)));
 
     return res;
 }
@@ -667,7 +669,7 @@ vec3 lighting(vec3 ambient_col, vec3 diffuse_col, vec3 specular_col,
 
     // directional lighting: sun
     tmp = directionalPhongLighting(diffuse_col, specular_col, alpha, p, normal, cam,
-                                   viewerNormal, sunDir, vec3(1, 0.6, 0), 0.4);
+                                   viewerNormal, sunDir, vec3(1, 0.8, 0), 0.4);
 
     // We arbitrarily set the
     // 'far' plane to FAR_DIST,
