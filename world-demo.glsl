@@ -1,14 +1,9 @@
 // Fragment shader source.
 
-// This is a simple scene using
-// a combination of raytracing
-// and raymarching to make some sort
-// of 3D spectrogram.
-// The code was written from scratch,
-// but I have used
-// https://www.shadertoy.com/view/Msl3Rr
-// (which is extremely similar to this scene)
-// as a guideline while writing this.
+// This is a basic raymarching template, with
+// a simple scene. To play around without
+// getting your hands dirty, mess with the
+// 'scene' function.
 
 precision mediump float;
 
@@ -421,21 +416,70 @@ mat3 rotateY(float x) {
     );
 }
 
-// Get height of rect
-// at position p.
-float height(vec2 p) {
-    vec2 r = fract(vec2(38.4103,38.43214+1.11*floor(p.x))*floor(p));
-    return texture2D(frequencyData, vec2(r.x+r.y, 0.5)).x * 30.0;
+// A couple helper distance functions
+// r is radius, y is y-position, t is thickness
+// e is edge radius (where applicable)
+// disc is just a variant of sdCappedCylinder
+
+float disc(vec3 p, float r, float y, float t) {
+    return max(abs(p.y - y) - t, length(p.xz) - r);
+}
+
+float roundedDisc(vec3 p, float r, float y, float t, float e) {
+    return smax(abs(p.y - y) - t, length(p.xz) - r, e);
+}
+
+// Another helper distance function
+HitPoint spectrogramDisc(vec3 p) {
+    // Create a disc
+    HitPoint res = HitPoint(roundedDisc(p, 3.0, -0.2, 0.2, 0.2) + cnoise(25.0*p)*0.003,
+                            vec3(1.0));
+
+    float bass = texture2D(frequencyData, vec2(0.1, 0.5)).x;
+
+    // Add a central bar
+    res = smin(res, HitPoint(udRoundBox(rotateY(time) * p - vec3(0, bass, 0),
+                                        vec3(bass*0.3, bass, bass*0.3),
+                                        bass*0.2),
+                             vec3(1, 0, 0)), 0.1);
+
+    // Circular spectrogram
+    const float inc = 1.0 / 20.0;
+    for (float i = 0.0; i < 1.0; i += inc) {
+        float height = texture2D(frequencyData, vec2(i, 0.5)).x;
+
+        vec3 unrotatedPos = vec3(1.0, height, 0);
+        vec3 boxSize = vec3(inc, height, inc);
+
+        res = min(res, HitPoint(udRoundBox(rotateY(i * 6.283185307) * p - unrotatedPos,
+                                           boxSize,
+                                           inc),
+                                 vec3(1.0 - i, i, 0)));
+    }
+
+    return res;
 }
 
 // Distance function for the scene
 HitPoint scene(vec3 p) {
-    HitPoint res = HitPoint(FAR_DIST, vec3(0.0));
+    HitPoint res = spectrogramDisc(p);
 
-    vec2 m = fract(p.xz);
-    float h = height(p.xz);
-    res = min(res, HitPoint(udRoundBox(vec3(m.x-0.5,p.y-h,m.y-0.5), vec3(0.4,h,0.4), 0.1),
-                            vec3(1.0)));
+    // barrier
+    for (float i = 0.0; i < 6.283185307; i += 1.047197551) {
+        res = min(res, HitPoint(sdCappedCylinder(rotateY(i) * p - vec3(2.7,0.5,0),vec2(0.1,0.5)),
+                                vec3(1)));
+    }
+
+    res = smin(res, HitPoint(sdTorus(p - vec3(0, 1.0, 0), vec2(2.7,0.15)), vec3(1)), 0.3);
+
+    // column
+    res = min(res, HitPoint(max(p.y+0.1,length(p.xz)-1.0), vec3(1)));
+
+    // landscape
+    // very slow: removed
+    // res = min(res, HitPoint(cnoise(p*0.02-vec3(time*0.2,0,0))*10.0 + p.y + 10.0,
+    //                         vec3((p.y+14.0)*0.25,(p.y+12.0)*0.4,1)));
+    res = min(res, HitPoint(p.y + 10.0, vec3(1.0, 1.0, 1.0)));
 
     return res;
 }
@@ -462,67 +506,15 @@ vec3 estimateNormal(vec3 p) {
     */
 }
 
-// https://tavianator.com/fast-branchless-raybounding-box-intersections/
-float intersection(float h, vec3 ro, vec3 rd) {
-    vec2 b = floor(ro.xz);
-    float t1 = (b.x     - ro.x)/rd.x;
-    float t2 = (b.x+1.0 - ro.x)/rd.x;
-
-    float tmin = min(t1, t2);
-    float tmax = max(t1, t2);
-
-    t1 = (0.0     - ro.y)/rd.y;
-    t2 = (h       - ro.y)/rd.y;
-
-    tmin = max(tmin, min(min(t1, t2), tmax));
-    tmax = min(tmax, max(max(t1, t2), tmin));
-
-    t1 = (b.y     - ro.z)/rd.z;
-    t2 = (b.y+1.0 - ro.z)/rd.z;
-
-    tmin = max(tmin, min(min(t1, t2), tmax));
-    tmax = min(tmax, max(max(t1, t2), tmin));
-
-    return tmax > max(tmin, 0.0) ? max(tmin, 0.0) : -1.0;
-}
-
 HitPoint march(vec3 ro, vec3 rd, float near, float far) {
     // ro and rd are ray origin and ray direction respectively
-    float depth = near, t, h, inter;
+    float depth = near;
     HitPoint c;
-
-    vec2 s;
-    vec3 p = ro + depth * rd;
-
     for (int i=0; i<MAX_MARCH_STEPS; ++i) {
-        // Raymarch across a 2D grid
-        // until we hit a block.
-        h = height(p.xz);
-        // Check box intersection here
-        inter = intersection(h, p, rd);
-        if (inter >= 0.0) {
-            // Time to actually raymarch
-            depth += inter;
-            for (int j=0; j<32; ++j) {
-                c = scene(p);
-                if (abs(c.dist) < EPSILON) break;
-
-                depth += c.dist * stepScale;
-                if (depth >= far) break;
-
-                p = ro + depth * rd;
-            }
-            c.dist = depth;
-            return c;
-        }
-
-        // Walk along the grid to the next cell
-        t = far;
-        s = 0.5/abs(rd.xz) - (floor(p.xz)-0.5)/rd.xz;
-        t = min(t, min(s.x, s.y));
-        depth += t + EPSILON;
+        c = scene(ro + depth * rd);
+        if (abs(c.dist) < EPSILON) break;
+        depth += c.dist * stepScale;
         if (depth >= far) break;
-        p = ro + depth * rd;
     }
     c.dist = depth;
     return c;
@@ -538,7 +530,7 @@ float shadow(vec3 ro, vec3 rd, float near, float far, float k) {
         if (dist < EPSILON) return 0.0;
         if (t >= far) break;
 		res = min(res, k*dist/t);
-        t += clamp(dist, 0.05, 0.5);
+        t += dist;
 	}
 
 	return clamp(res, 0.0, 1.0);
