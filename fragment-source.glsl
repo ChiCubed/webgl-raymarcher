@@ -13,9 +13,10 @@
 precision mediump float;
 
 // Some raymarching constants.
-const int MAX_MARCH_STEPS = 128;
+const int MAX_TRACE_STEPS = 128;
+const int MAX_MARCH_STEPS = 32;
 const int MAX_SHADOW_MARCH_STEPS = 64;
-const float NEAR_DIST = 0.01;
+const float NEAR_DIST = 0.001;
 const float FAR_DIST = 256.0;
 float FOV = 60.0;
 const float EPSILON = 0.001;
@@ -421,11 +422,15 @@ mat3 rotateY(float x) {
     );
 }
 
+float hash(float n) {
+	return fract(sin(n)*13.5453123);
+}
+
 // Get height of rect
 // at position p.
 float height(vec2 p) {
-    vec2 r = fract(vec2(38.4103,38.43214+1.11*floor(p.x))*floor(p));
-    return texture2D(frequencyData, vec2(r.x+r.y, 0.5)).x * 30.0;
+    float r = hash(dot(vec2(50.8,1.3),floor(p)));
+    return texture2D(frequencyData, vec2(r, 0.5)).x * 6.0;
 }
 
 // Distance function for the scene
@@ -434,7 +439,7 @@ HitPoint scene(vec3 p) {
 
     vec2 m = fract(p.xz);
     float h = height(p.xz);
-    res = min(res, HitPoint(udRoundBox(vec3(m.x-0.5,p.y-h,m.y-0.5), vec3(0.4,h,0.4), 0.1),
+    res = min(res, HitPoint(udRoundBox(vec3(m.x-0.5,p.y-h*0.5,m.y-0.5), vec3(0.4,h*0.5,0.4), 0.1),
                             vec3(1.0)));
 
     return res;
@@ -463,68 +468,89 @@ vec3 estimateNormal(vec3 p) {
 }
 
 // https://tavianator.com/fast-branchless-raybounding-box-intersections/
-float intersection(float h, vec3 ro, vec3 rd) {
+vec2 intersection(float miny, float maxy, vec3 ro, vec3 rid) {
     vec2 b = floor(ro.xz);
-    float t1 = (b.x     - ro.x)/rd.x;
-    float t2 = (b.x+1.0 - ro.x)/rd.x;
+    float t1 = (b.x     - ro.x)*rid.x;
+    float t2 = (b.x+1.0 - ro.x)*rid.x;
 
     float tmin = min(t1, t2);
     float tmax = max(t1, t2);
 
-    t1 = (0.0     - ro.y)/rd.y;
-    t2 = (h       - ro.y)/rd.y;
+    t1 = (miny    - ro.y)*rid.y;
+    t2 = (maxy    - ro.y)*rid.y;
 
     tmin = max(tmin, min(min(t1, t2), tmax));
     tmax = min(tmax, max(max(t1, t2), tmin));
 
-    t1 = (b.y     - ro.z)/rd.z;
-    t2 = (b.y+1.0 - ro.z)/rd.z;
+    t1 = (b.y     - ro.z)*rid.z;
+    t2 = (b.y+1.0 - ro.z)*rid.z;
 
     tmin = max(tmin, min(min(t1, t2), tmax));
     tmax = min(tmax, max(max(t1, t2), tmin));
 
-    return tmax > max(tmin, 0.0) ? max(tmin, 0.0) : -1.0;
+    return tmax > max(tmin, 0.0) ? vec2(max(tmin,0.0),tmax) : vec2(-1.0);
+}
+
+float infintersection(vec3 ro, vec3 rid) {
+    vec2 b = floor(ro.xz);
+    float t1 = (b.x     - ro.x)*rid.x;
+    float t2 = (b.x+1.0 - ro.x)*rid.x;
+
+    float tmin = min(t1, t2);
+    float tmax = max(t1, t2);
+
+    t1 = (b.y     - ro.z)*rid.z;
+    t2 = (b.y+1.0 - ro.z)*rid.z;
+
+    tmin = max(tmin, min(min(t1, t2), tmax));
+    tmax = min(tmax, max(max(t1, t2), tmin));
+
+    return tmax;
 }
 
 HitPoint march(vec3 ro, vec3 rd, float near, float far) {
     // ro and rd are ray origin and ray direction respectively
-    float depth = near, t, h, inter;
+    float depth = near, t, h;
+	vec2 inter;
     HitPoint c;
 
     vec2 s;
+	vec3 rid = 1.0 / rd;
     vec3 p = ro + depth * rd;
 
-    for (int i=0; i<MAX_MARCH_STEPS; ++i) {
+    for (int i=0; i<MAX_TRACE_STEPS; ++i) {
         // Raymarch across a 2D grid
         // until we hit a block.
         h = height(p.xz);
         // Check box intersection here
-        inter = intersection(h, p, rd);
-        if (inter >= 0.0) {
+        vec2 inter = intersection(-0.1,h+0.1,p,rid)+depth;
+        if (inter.x >= depth) {
             // Time to actually raymarch
-            depth += inter;
-            for (int j=0; j<32; ++j) {
+            depth = inter.x;
+			p = ro + depth * rd;
+
+            for (int j=0; j<MAX_MARCH_STEPS; ++j) {
                 c = scene(p);
                 if (abs(c.dist) < EPSILON) break;
 
                 depth += c.dist * stepScale;
-                if (depth >= far) break;
-
-                p = ro + depth * rd;
+				p = ro + depth * rd;
+                if (depth > inter.y || depth >= far) break;
             }
-            c.dist = depth;
-            return c;
-        }
+			if (depth <= inter.y) {
+            	c.dist = depth;
+            	return c;
+			} else {
+				depth = inter.x;
+				p = ro + depth * rd;
+			}
+		}
+		depth += infintersection(p,rid)+EPSILON;
+		p = ro + depth * rd;
 
-        // Walk along the grid to the next cell
-        t = far;
-        s = 0.5/abs(rd.xz) - (floor(p.xz)-0.5)/rd.xz;
-        t = min(t, min(s.x, s.y));
-        depth += t + EPSILON;
-        if (depth >= far) break;
-        p = ro + depth * rd;
+		if (depth >= far) break;
     }
-    c.dist = depth;
+    c.dist = far;
     return c;
 }
 
@@ -533,12 +559,17 @@ HitPoint march(vec3 ro, vec3 rd, float near, float far) {
 // Based on http://www.iquilezles.org/www/articles/rmshadows/rmshadows.htm
 float shadow(vec3 ro, vec3 rd, float near, float far, float k) {
 	float res = 1.0, dist, t = near;
+	vec3 p = ro + rd*t;
+	vec3 rid = 1.0 / rd;
 	for (int i = 0; i < MAX_SHADOW_MARCH_STEPS; ++i) {
-		dist = scene(ro + rd*t).dist;
-        if (dist < EPSILON) return 0.0;
-        if (t >= far) break;
+		dist = scene(p).dist;
 		res = min(res, k*dist/t);
-        t += clamp(dist, 0.05, 0.5);
+
+		// go to next cell
+        t += min(dist, infintersection(p, rid)+EPSILON);
+		p = ro + rd*t;
+
+		if (dist < EPSILON || t >= far) break;
 	}
 
 	return clamp(res, 0.0, 1.0);
@@ -639,6 +670,7 @@ vec3 directionalPhongLighting(vec3 diffuse_col, vec3 specular_col, float alpha,
 
 
 vec3 sunDir; // A global variable for the sun light's direction.
+vec3 lightPos, lightCol;
 
 
 // This function calculates the colour of a pixel according to
@@ -653,10 +685,8 @@ vec3 lighting(vec3 ambient_col, vec3 diffuse_col, vec3 specular_col,
     vec3 viewerNormal = normalize(cam - p);
 
     // point lighting
-    const vec3 lightPos = vec3(0,3,0);
-
     vec3 tmp = phongLighting(diffuse_col, specular_col, alpha, p, normal, cam,
-                             viewerNormal, lightPos, vec3(1,1,1), 0.5, 0.0025);
+                             viewerNormal, lightPos, lightCol, 0.5, 0.00025);
 
     // if the point is lit at all:
     if (tmp != vec3(0.0)) {
@@ -676,29 +706,31 @@ vec3 lighting(vec3 ambient_col, vec3 diffuse_col, vec3 specular_col,
     colour += tmp;
 
     // directional lighting: sun
-    tmp = directionalPhongLighting(diffuse_col, specular_col, alpha, p, normal, cam,
-                                   viewerNormal, sunDir, vec3(1, 0.8, 0), 0.4);
+	if (sunDir.y < 0.0) {
+		tmp = directionalPhongLighting(diffuse_col, specular_col, alpha, p, normal, cam,
+									   viewerNormal, sunDir, vec3(1, 0.8, 0), 0.4);
 
-    // We arbitrarily set the
-    // 'far' plane to FAR_DIST,
-    // so if an object is not
-    // in shadow within FAR_DIST
-    // units it is not
-    // in shadow at all.
-    tmp *= shadow(p + normal*EPSILON*2.0,
-                  -sunDir, EPSILON*2.0, FAR_DIST, 8.0);
+		// We arbitrarily set the
+		// 'far' plane to FAR_DIST,
+		// so if an object is not
+		// in shadow within FAR_DIST
+		// units it is not
+		// in shadow at all.
+		tmp *= shadow(p + normal*EPSILON*2.0,
+					  -sunDir, EPSILON*2.0, FAR_DIST, 8.0);
 
-    colour += tmp;
+		colour += tmp;
+	} else {
+		// moon:
+		// direction is the negation of sunDir
+		tmp = directionalPhongLighting(diffuse_col, specular_col, alpha, p, normal, cam,
+									   viewerNormal, -sunDir, vec3(0.9, 0.9, 1), 0.1);
 
-    // moon:
-    // direction is the negation of sunDir
-    tmp = directionalPhongLighting(diffuse_col, specular_col, alpha, p, normal, cam,
-                                   viewerNormal, -sunDir, vec3(0.9, 0.9, 1), 0.1);
+		tmp *= shadow(p + normal*EPSILON*2.0,
+					  sunDir, EPSILON*2.0, FAR_DIST, 8.0);
 
-    tmp *= shadow(p + normal*EPSILON*2.0,
-                  sunDir, EPSILON*2.0, FAR_DIST, 8.0);
-
-    colour += tmp;
+		colour += tmp;
+	}
 
 	return colour;
 }
@@ -730,6 +762,8 @@ vec3 direction(float fov, vec2 coord, vec2 size) {
 
 void main() {
     sunDir = rotateX(time*0.1)*vec3(0.0, -1.0, 0.0);
+	lightPos = 15.0*vec3(sin(time),1,cos(time));
+	lightCol = vec3(sin(time*1.2+0.4)*0.2+0.7,cos(time*1.5+4.2)*0.3+0.5,sin(time*0.3+0.2)*0.3+0.4);
 
 
     // For fun, let's make the FOV pulsate
