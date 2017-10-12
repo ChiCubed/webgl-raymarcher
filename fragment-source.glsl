@@ -15,13 +15,14 @@ precision mediump float;
 // Some raymarching constants.
 const int MAX_TRACE_STEPS = 128;
 const int MAX_MARCH_STEPS = 32;
-const int MAX_SHADOW_MARCH_STEPS = 64;
+const int MAX_SHADOW_MARCH_STEPS = 32;
 const float NEAR_DIST = 0.001;
-const float FAR_DIST = 256.0;
+const float FAR_DIST = 80.0;
 float FOV = 60.0;
 const float EPSILON = 0.001;
 const float NORMAL_EPSILON = 0.001;
 const float stepScale = 0.90;
+const int MAX_REFLECTIONS = 2;
 
 const float M_PI = 3.14159265358979323846;
 
@@ -32,6 +33,7 @@ float ambientIntensity = 1.0;
 struct HitPoint {
     float dist; // distance to scene
     vec3 diffuse; // diffuse colour
+	float reflectivity;
 };
 
 // Helper functions for HitPoint
@@ -240,7 +242,7 @@ float smax(float a, float b, float k) {
 HitPoint smin(HitPoint a, HitPoint b, float k) {
     float h = clamp(0.5 + 0.5*(b.dist-a.dist)/k, 0.0, 1.0);
     return HitPoint(mix(b.dist,a.dist,h)-k*h*(1.0-h),
-                    mix(b.diffuse,a.diffuse,smoothstep(0.0,1.0,h)));
+                    mix(b.diffuse,a.diffuse,smoothstep(0.0,1.0,h)),mix(b.reflectivity,a.reflectivity,smoothstep(0.0,1.0,h)));
 }
 
 // Distance functions.
@@ -444,12 +446,16 @@ float height(vec2 p) {
 
 // Distance function for the scene
 HitPoint scene(vec3 p) {
-    HitPoint res = HitPoint(FAR_DIST, vec3(0.0));
+    HitPoint res = HitPoint(FAR_DIST, vec3(0.0), 0.0);
 
     vec2 m = fract(p.xz);
+	vec2 ip = floor(p.xz);
     float h = height(p.xz);
-    res = min(res, HitPoint(udRoundBox(vec3(m.x-0.5,p.y-h*0.5,m.y-0.5), vec3(0.4,h*0.5,0.4), 0.1),
-                            vec3(1.0)));
+
+	float box = udRoundBox(vec3(m.x-0.5,p.y-h*0.5,m.y-0.5), vec3(0.4,h*0.5,0.4), 0.1);
+
+    res = min(res, HitPoint(box,
+                            vec3(1.0), floor(hash(dot(vec2(1.4,33.2),ip))+0.3)));
 
     return res;
 }
@@ -517,7 +523,7 @@ float infintersection(vec3 ro, vec3 rid) {
     return tmax;
 }
 
-HitPoint march(vec3 ro, vec3 rd, float near, float far) {
+HitPoint march(vec3 ro, vec3 rd, float near, float far, int numTraceSteps) {
     // ro and rd are ray origin and ray direction respectively
     float depth = near, t, h;
 	vec2 inter;
@@ -528,11 +534,12 @@ HitPoint march(vec3 ro, vec3 rd, float near, float far) {
     vec3 p = ro + depth * rd;
 
     for (int i=0; i<MAX_TRACE_STEPS; ++i) {
+		if (i >= numTraceSteps) break;
         // Raymarch across a 2D grid
         // until we hit a block.
         h = height(p.xz);
         // Check box intersection here
-        vec2 inter = intersection(-0.1,h+0.1,p,rid)+depth;
+        vec2 inter = intersection(0.0,h+0.1,p,rid)+depth;
         if (inter.x >= depth) {
             // Time to actually raymarch
             depth = inter.x;
@@ -566,11 +573,13 @@ HitPoint march(vec3 ro, vec3 rd, float near, float far) {
 // Calculates the amount that a pixel
 // is in shadow from a light.
 // Based on http://www.iquilezles.org/www/articles/rmshadows/rmshadows.htm
-float shadow(vec3 ro, vec3 rd, float near, float far, float k) {
+float shadow(vec3 ro, vec3 rd, float near, float far, float k, int numMarchSteps) {
 	float res = 1.0, dist, t = near;
 	vec3 p = ro + rd*t;
 	vec3 rid = 1.0 / rd;
 	for (int i = 0; i < MAX_SHADOW_MARCH_STEPS; ++i) {
+		if (i >= numMarchSteps) break;
+
 		dist = scene(p).dist;
 		res = min(res, k*dist/t);
 
@@ -685,12 +694,11 @@ vec3 lightPos, lightCol;
 // This function calculates the colour of a pixel according to
 // the lighting and its diffuse colour.
 vec3 lighting(vec3 ambient_col, vec3 diffuse_col, vec3 specular_col,
-              float alpha, vec3 p, vec3 cam, float ambientIntensity) {
+              float alpha, vec3 normal, vec3 p, vec3 cam, float ambientIntensity, int numShadowMarchSteps) {
     // current colour
     vec3 colour = ambient_col * ambientIntensity;
 
     // normals
-    vec3 normal = estimateNormal(p);
     vec3 viewerNormal = normalize(cam - p);
 
     // point lighting
@@ -709,10 +717,10 @@ vec3 lighting(vec3 ambient_col, vec3 diffuse_col, vec3 specular_col,
         // point which we originally intersected,
         // to prevent artefacts when the normal is
         // almost perpendicular to the light.
-        tmp *= shadow(p + normal*EPSILON*2.0, relDir, EPSILON*2.0, dist, 8.0);
+        tmp *= shadow(p + normal*EPSILON*2.0, relDir, EPSILON*2.0, dist, 8.0, numShadowMarchSteps);
     }
 
-    colour += tmp;
+	colour += tmp;
 
     // directional lighting: sun
 	if (sunDir.y < 0.0) {
@@ -726,7 +734,7 @@ vec3 lighting(vec3 ambient_col, vec3 diffuse_col, vec3 specular_col,
 		// units it is not
 		// in shadow at all.
 		tmp *= shadow(p + normal*EPSILON*2.0,
-					  -sunDir, EPSILON*2.0, FAR_DIST, 8.0);
+					  -sunDir, EPSILON*2.0, FAR_DIST, 8.0, numShadowMarchSteps);
 
 		colour += tmp;
 	} else {
@@ -736,7 +744,7 @@ vec3 lighting(vec3 ambient_col, vec3 diffuse_col, vec3 specular_col,
 									   viewerNormal, -sunDir, vec3(0.9, 0.9, 1), 0.1);
 
 		tmp *= shadow(p + normal*EPSILON*2.0,
-					  sunDir, EPSILON*2.0, FAR_DIST, 8.0);
+					  sunDir, EPSILON*2.0, FAR_DIST, 8.0, numShadowMarchSteps);
 
 		colour += tmp;
 	}
@@ -769,8 +777,60 @@ vec3 direction(float fov, vec2 coord, vec2 size) {
     return normalize(tmp);
 }
 
+vec3 render(vec3 ro, vec3 rd) {
+	HitPoint result;
+	vec3 colour, tmpColour, skyColour;
+	float alpha = 1.0, fogAmt;
+	for (int i = 0; i < MAX_REFLECTIONS + 1; i++) {
+		result = march(ro, rd, NEAR_DIST, FAR_DIST, 128 - i*48);
+
+		// Set the sky colour
+		skyColour = clamp(vec3(0.1,0.6,1.0)*(rd.y*0.2+0.8)*(-sunDir.y), vec3(0.0), vec3(1.0));
+		// sun
+		skyColour += vec3(0.8, 0.5, 0.0) * clamp(1.0 - length(-sunDir-rd), 0.0, 1.0);
+
+		// moon
+		float moonIntensity = 1.0 - length(sunDir-rd);
+		moonIntensity = pow(moonIntensity, 5.0);
+		skyColour += vec3(0.9, 0.9, 1.0) * clamp(moonIntensity, 0.0, 1.0);
+
+		skyColour = clamp(skyColour,vec3(0),vec3(1));
+
+		if (result.dist < FAR_DIST - EPSILON) {
+			// Calculate colour based on lights
+			vec3 normal = estimateNormal(ro + result.dist*rd);
+			tmpColour = lighting(AMBIENT_COLOUR, result.diffuse, vec3(1,1,1),
+								   4.0, normal, ro + result.dist*rd, cameraPos, ambientIntensity, MAX_SHADOW_MARCH_STEPS - 16*i);
+
+			// Fog
+			fogAmt = result.dist / FAR_DIST;
+			fogAmt *= fogAmt;
+			tmpColour = mix(tmpColour, skyColour, fogAmt);
+
+			// Handle reflection
+			colour += tmpColour * alpha;
+
+			// Second part of fog
+			alpha *= 1.0 - fogAmt;
+
+			if (result.reflectivity == 0.0) break;
+
+			ro += rd * (result.dist - EPSILON);
+			rd = reflect(rd, normal);
+			alpha *= result.reflectivity;
+		} else {
+			tmpColour = skyColour;
+
+			colour += tmpColour * alpha;
+			break;
+		}
+	}
+
+	return colour;
+}
+
 void main() {
-    sunDir = rotateX(time*0.1)*vec3(0.0, -1.0, 0.0);
+    sunDir = rotateX(time*0.08)*vec3(0.0, -1.0, 0.0);
 	lightPos = 15.0*vec3(sin(time),1,cos(time));
 	lightCol = vec3(sin(time*1.2+0.4)*0.2+0.7,cos(time*1.5+4.2)*0.3+0.5,sin(time*0.3+0.2)*0.3+0.4);
 
@@ -787,24 +847,10 @@ void main() {
     // Convert the ray direction to world coordinates.
     vec3 worldRayDir = vec3(viewToWorld * vec4(rayDir,1));
 
-    // Cast a ray
-    HitPoint result = march(cameraPos, worldRayDir, NEAR_DIST, FAR_DIST);
+	vec3 ro = cameraPos;
 
-    if (result.dist < FAR_DIST - EPSILON) {
-        // Calculate colour based on lights
-        vec3 colour = lighting(AMBIENT_COLOUR, result.diffuse, vec3(1,1,1),
-                               4.0, cameraPos + worldRayDir*result.dist, cameraPos, ambientIntensity);
-        gl_FragColor = vec4(colour,1);
-    } else {
-        vec3 skyColour = clamp(vec3(0.1,0.6,1.0)*(worldRayDir.y*0.2+0.8)*(-sunDir.y), vec3(0.0), vec3(1.0));
-        // sun
-        skyColour += vec3(1.0, 0.5, 0.0) * clamp(1.0 - length(-sunDir-worldRayDir), 0.0, 0.5);
+    // Render
+	vec3 colour = render(ro, worldRayDir);
 
-        // moon
-        float moonIntensity = 1.0 - length(sunDir-worldRayDir);
-        moonIntensity = pow(moonIntensity, 5.0);
-        skyColour += vec3(0.9, 0.9, 1.0) * clamp(moonIntensity, 0.0, 1.0);
-
-        gl_FragColor = vec4(clamp(skyColour,vec3(0),vec3(1)),1);
-    }
+	gl_FragColor = vec4(colour, 1);
 }
