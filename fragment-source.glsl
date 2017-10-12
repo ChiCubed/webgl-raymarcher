@@ -436,12 +436,21 @@ float cubicPulse(float w, float x) {
     return 1.0 - x*x*(3.0-2.0*x);
 }
 
+// Get the coordinate of the texture
+// at point p, given it's been floored.
+float texCoord(vec2 ip) {
+    return hash(dot(vec2(50.8,1.3),ip));
+}
+
 // Get height of rect
 // at position p.
 float height(vec2 p) {
     vec2 ip = floor(p);
-    float r = hash(dot(vec2(50.8,1.3),ip));
-    return texture2D(frequencyData, vec2(r, 0.5)).x * 8.0 * (cubicPulse(40.0, length(ip)) + 0.1);
+    float r = texCoord(ip);
+    return texture2D(frequencyData, vec2(r, 0.5)).x * 12.0
+        * (cubicPulse(40.0, length(ip)) + 0.1) // This makes bars closer to the center higher.
+        * (r*0.65 + 0.35) // This makes bars with higher frequencies higher.
+        ;
 }
 
 // Distance function for the scene
@@ -454,8 +463,10 @@ HitPoint scene(vec3 p) {
 
 	float box = udRoundBox(vec3(m.x-0.5,p.y-h*0.5,m.y-0.5), vec3(0.4,h*0.5,0.4), 0.1);
 
-    res = min(res, HitPoint(box,
-                            vec3(1.0), floor(hash(dot(vec2(1.4,33.2),ip))+0.3)));
+    float r = texCoord(ip);
+    res = min(res, HitPoint(box, vec3(1),
+                            floor(r+0.4)) // Reflectivity is determined by frequency
+             );
 
     return res;
 }
@@ -539,7 +550,7 @@ HitPoint march(vec3 ro, vec3 rd, float near, float far, int numTraceSteps) {
         // until we hit a block.
         h = height(p.xz);
         // Check box intersection here
-        vec2 inter = intersection(0.0,h+0.1,p,rid)+depth;
+        vec2 inter = intersection(-0.1,h+0.1,p,rid)+depth;
         if (inter.x >= depth) {
             // Time to actually raymarch
             depth = inter.x;
@@ -703,7 +714,7 @@ vec3 lighting(vec3 ambient_col, vec3 diffuse_col, vec3 specular_col,
 
     // point lighting
     vec3 tmp = phongLighting(diffuse_col, specular_col, alpha, p, normal, cam,
-                             viewerNormal, lightPos, lightCol, 0.5, 0.00025);
+                             viewerNormal, lightPos, lightCol, 0.7, 0.0001);
 
     // if the point is lit at all:
     if (tmp != vec3(0.0)) {
@@ -741,7 +752,7 @@ vec3 lighting(vec3 ambient_col, vec3 diffuse_col, vec3 specular_col,
 		// moon:
 		// direction is the negation of sunDir
 		tmp = directionalPhongLighting(diffuse_col, specular_col, alpha, p, normal, cam,
-									   viewerNormal, -sunDir, vec3(0.9, 0.9, 1), 0.1);
+									   viewerNormal, -sunDir, vec3(0.9, 0.9, 1), 0.25);
 
 		tmp *= shadow(p + normal*EPSILON*2.0,
 					  sunDir, EPSILON*2.0, FAR_DIST, 8.0, numShadowMarchSteps);
@@ -803,8 +814,7 @@ vec3 render(vec3 ro, vec3 rd) {
 								   4.0, normal, ro + result.dist*rd, cameraPos, ambientIntensity, MAX_SHADOW_MARCH_STEPS - 16*i);
 
 			// Fog
-			fogAmt = result.dist / FAR_DIST;
-			fogAmt *= fogAmt;
+			fogAmt = pow(result.dist / FAR_DIST, 1.5);
 			tmpColour = mix(tmpColour, skyColour, fogAmt);
 
 			// Handle reflection
@@ -830,7 +840,7 @@ vec3 render(vec3 ro, vec3 rd) {
 }
 
 void main() {
-    sunDir = rotateX(time*0.08)*vec3(0.0, -1.0, 0.0);
+    sunDir = rotateX(time*0.1)*vec3(0.0, -1.0, 0.0);
 	lightPos = 15.0*vec3(sin(time),1,cos(time));
 	lightCol = vec3(sin(time*1.2+0.4)*0.2+0.7,cos(time*1.5+4.2)*0.3+0.5,sin(time*0.3+0.2)*0.3+0.4);
 
@@ -852,5 +862,13 @@ void main() {
     // Render
 	vec3 colour = render(ro, worldRayDir);
 
-	gl_FragColor = vec4(colour, 1);
+    // Gamma correction
+    colour = pow(colour, vec3(0.85));
+
+    // Vignetting
+    vec2 uv = gl_FragCoord.xy / screenSize;
+    uv *= 1.0 - uv;
+    float vig = pow(uv.x*uv.y * 16.0, 0.3);
+
+	gl_FragColor = vec4(colour * vig, 1);
 }
