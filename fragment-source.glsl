@@ -465,7 +465,7 @@ HitPoint scene(vec3 p) {
 
     float r = texCoord(ip);
     res = min(res, HitPoint(box, vec3(1),
-                            floor(r+0.4)) // Reflectivity is determined by frequency
+                            floor(r+0.3)) // Reflectivity is determined by frequency
              );
 
     return res;
