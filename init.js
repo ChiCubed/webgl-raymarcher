@@ -189,7 +189,9 @@ function resizeCanvas(width, height) {
 
 function changeAudioInput(inputMethod) {
     if (inputMethod == 'microphone') {
-        if (navigator.medaiDevices.getUserMedia) {
+        if (navigator &&
+                navigator.mediaDevices &&
+                navigator.mediaDevices.getUserMedia) {
             navigator.mediaDevices.getUserMedia({audio: true, video: false})
                 .then(function(stream) {
                 if (source !== null)
@@ -201,7 +203,7 @@ function changeAudioInput(inputMethod) {
             });
             audioElement.src = '';
         } else {
-            alert("Accessing microphone unsupported.");
+            alert('Cannot access microphone');
         }
     } else if (inputMethod == 'file') {
         audioElement.src = URL.createObjectURL(audioFileInput.files[0]);
