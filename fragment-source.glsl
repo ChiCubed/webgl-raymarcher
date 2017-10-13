@@ -21,8 +21,11 @@ const float FAR_DIST = 80.0;
 float FOV = 60.0;
 const float EPSILON = 0.001;
 const float NORMAL_EPSILON = 0.001;
+const vec3 eps = vec3(1.0, -1.0, 0.0) * NORMAL_EPSILON;
 const float stepScale = 0.90;
-const int MAX_REFLECTIONS = 2;
+const int MAX_REFLECTIONS = 3;
+
+#define CHEAP_NORMALS
 
 const float M_PI = 3.14159265358979323846;
 
@@ -474,23 +477,20 @@ HitPoint scene(vec3 p) {
 // Estimate normal at a point
 // for lighting calcs
 vec3 estimateNormal(vec3 p) {
-    const vec2 eps = vec2(1.0, -1.0) * NORMAL_EPSILON;
-
-    return normalize(
-        eps.xyy * scene(p+eps.xyy).dist +
-        eps.yyx * scene(p+eps.yyx).dist +
-        eps.yxy * scene(p+eps.yxy).dist +
-        eps.xxx * scene(p+eps.xxx).dist
-    );
-
-    /*
-    const vec2 eps = vec2(1.0, 0.0) * NORMAL_EPSILON;
-    return normalize(vec3(
-        scene(p+eps.xyy).dist - scene(p-eps.xyy).dist,
-        scene(p+eps.yxy).dist - scene(p-eps.yxy).dist,
-        scene(p+eps.yyx).dist - scene(p-eps.yyx).dist)
-    );
-    */
+	#ifdef CHEAP_NORMALS
+		return normalize(
+			eps.xyy * scene(p+eps.xyy).dist +
+			eps.yyx * scene(p+eps.yyx).dist +
+			eps.yxy * scene(p+eps.yxy).dist +
+			eps.xxx * scene(p+eps.xxx).dist
+		);
+	#else
+		return normalize(vec3(
+			scene(p+eps.xzz).dist - scene(p-eps.xzz).dist,
+			scene(p+eps.zxz).dist - scene(p-eps.zxz).dist,
+			scene(p+eps.zzx).dist - scene(p-eps.zzx).dist)
+		);
+    #endif
 }
 
 // https://tavianator.com/fast-branchless-raybounding-box-intersections/
@@ -788,6 +788,17 @@ vec3 direction(float fov, vec2 coord, vec2 size) {
     return normalize(tmp);
 }
 
+float fbm(vec3 p, float f, float lacunarity, float add) {
+    float t = 0.0, amp = 1.0, sumAmp = 0.0;
+    for(int k = 0; k < 4; ++k) {
+        t += min(snoise(p * f)+add, 1.0) * amp;
+        sumAmp += amp;
+        amp *= 0.5;
+        f *= lacunarity;
+    }
+    return t/sumAmp;
+}
+
 vec3 render(vec3 ro, vec3 rd) {
 	HitPoint result;
 	vec3 colour, tmpColour, skyColour;
@@ -798,7 +809,8 @@ vec3 render(vec3 ro, vec3 rd) {
 		// Set the sky colour
 		skyColour = clamp(vec3(0.1,0.6,1.0)*(rd.y*0.2+0.8)*(-sunDir.y), vec3(0.0), vec3(1.0));
 		// sun
-		skyColour += vec3(0.8, 0.5, 0.0) * clamp(1.0 - length(-sunDir-rd), 0.0, 1.0);
+		float sun = clamp(1.0 - length(-sunDir-rd), 0.0, 1.0);
+		skyColour += vec3(0.8, 0.5, 0.0) * sun;
 
 		// moon
 		float moonIntensity = 1.0 - length(sunDir-rd);
@@ -807,13 +819,23 @@ vec3 render(vec3 ro, vec3 rd) {
 
 		skyColour = clamp(skyColour,vec3(0),vec3(1));
 
+		// clouds
+		// https://www.shadertoy.com/view/MdBGzG
+		float pt = (1000.0-ro.y)/rd.y;
+		if (pt > 0.0) {
+			vec3 spos = ro + pt*rd;
+			float clo = 1.0-fbm(vec3(spos.xz*0.0001-vec2(time*0.05,0), time*0.05), 7.0, 0.1, 0.3);
+			vec3 cloCol = mix( vec3(0.4,0.5,0.6), vec3(1.3,0.6,0.4), pow(sun,2.0))*(0.5+0.5*clo);
+			skyColour = mix(skyColour, cloCol, 0.5*smoothstep(0.4, 1.0, clo));
+		}
+
 		if (result.dist < FAR_DIST - EPSILON) {
 			// Calculate colour based on lights
 			vec3 normal = estimateNormal(ro + result.dist*rd);
 			tmpColour = lighting(AMBIENT_COLOUR, result.diffuse, vec3(1,1,1),
 								   4.0, normal, ro + result.dist*rd, cameraPos, ambientIntensity, MAX_SHADOW_MARCH_STEPS - 16*i);
 
-			// Fog
+			// Apply fog
 			fogAmt = pow(result.dist / FAR_DIST, 1.5);
 			tmpColour = mix(tmpColour, skyColour, fogAmt);
 
