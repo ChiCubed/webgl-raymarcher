@@ -189,16 +189,20 @@ function resizeCanvas(width, height) {
 
 function changeAudioInput(inputMethod) {
     if (inputMethod == 'microphone') {
-        navigator.mediaDevices.getUserMedia({audio: true, video: false})
-            .then(function(stream) {
-            if (source !== null)
-                source.disconnect();
-            analyser.disconnect();
+        if (navigator.medaiDevices.getUserMedia) {
+            navigator.mediaDevices.getUserMedia({audio: true, video: false})
+                .then(function(stream) {
+                if (source !== null)
+                    source.disconnect();
+                analyser.disconnect();
 
-            source = audioCtx.createMediaStreamSource(stream);
-            source.connect(analyser);
-        });
-        audioElement.src = '';
+                source = audioCtx.createMediaStreamSource(stream);
+                source.connect(analyser);
+            });
+            audioElement.src = '';
+        } else {
+            alert("Accessing microphone unsupported.");
+        }
     } else if (inputMethod == 'file') {
         audioElement.src = URL.createObjectURL(audioFileInput.files[0]);
 
@@ -276,6 +280,7 @@ function init() {
     glCanvas.requestPointerLock = glCanvas.requestPointerLock ||
                                glCanvas.mozRequestPointerLock;
 
+    // ensure that we can set pointer lock
     if (glCanvas.requestPointerLock) {
         glCanvas.addEventListener("click", function() {
             glCanvas.requestPointerLock();
