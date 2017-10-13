@@ -824,8 +824,13 @@ vec3 render(vec3 ro, vec3 rd) {
 		float pt = (1000.0-ro.y)/rd.y;
 		if (pt > 0.0) {
 			vec3 spos = ro + pt*rd;
-			float clo = 1.0-fbm(vec3(spos.xz*0.0001-vec2(time*0.05,0), time*0.05), 7.0, 0.1, 0.3);
-			vec3 cloCol = mix( vec3(0.4,0.5,0.6), vec3(1.3,0.6,0.4), pow(sun,2.0))*(0.5+0.5*clo);
+            vec3 fpos = vec3(spos.xz*0.0001-vec2(time*0.02,0), time*0.01);
+			float clo = clamp(1.0
+                - fbm(fpos,4.0,0.1,0.3)
+                + fbm(fpos,24.0,0.8,-0.1)*0.3
+                - fbm(fpos,64.0,0.4,-0.1)*0.1,
+                0.0, 1.0);
+			vec3 cloCol = mix(vec3(0.4,0.5,0.6), vec3(1.3,0.6,0.4), pow(sun,2.0))*(0.5+0.5*clo);
 			skyColour = mix(skyColour, cloCol, 0.5*smoothstep(0.4, 1.0, clo));
 		}
 
