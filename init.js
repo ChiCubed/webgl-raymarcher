@@ -276,12 +276,14 @@ function init() {
     glCanvas.requestPointerLock = glCanvas.requestPointerLock ||
                                glCanvas.mozRequestPointerLock;
 
-    glCanvas.addEventListener("click", function() {
-        glCanvas.requestPointerLock();
-    }, false);
+    if (glCanvas.requestPointerLock) {
+        glCanvas.addEventListener("click", function() {
+            glCanvas.requestPointerLock();
+        }, false);
 
-    document.addEventListener("pointerlockchange", changePointerLock, false);
-    document.addEventListener("mozpointerlockchange", changePointerLock, false);
+        document.addEventListener("pointerlockchange", changePointerLock, false);
+        document.addEventListener("mozpointerlockchange", changePointerLock, false);
+    }
 
     // Web Audio initialisation
     // https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API/Visualizations_with_Web_Audio_API
