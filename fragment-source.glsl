@@ -26,6 +26,7 @@ const float stepScale = 0.90;
 const int MAX_REFLECTIONS = 3;
 
 #define CHEAP_NORMALS
+#define ENABLE_CLOUDS
 
 const float M_PI = 3.14159265358979323846;
 
@@ -496,29 +497,19 @@ vec3 estimateNormal(vec3 p) {
 // https://tavianator.com/fast-branchless-raybounding-box-intersections/
 vec2 intersection(float miny, float maxy, vec3 ro, vec3 rid) {
     vec2 b = floor(ro.xz);
-    float t1 = (b.x     - ro.x)*rid.x;
-    float t2 = (b.x+1.0 - ro.x)*rid.x;
+
+    float t1 = (miny    - ro.y)*rid.y;
+    float t2 = (maxy    - ro.y)*rid.y;
 
     float tmin = min(t1, t2);
     float tmax = max(t1, t2);
-
-    t1 = (miny    - ro.y)*rid.y;
-    t2 = (maxy    - ro.y)*rid.y;
-
-    tmin = max(tmin, min(min(t1, t2), tmax));
-    tmax = min(tmax, max(max(t1, t2), tmin));
-
-    t1 = (b.y     - ro.z)*rid.z;
-    t2 = (b.y+1.0 - ro.z)*rid.z;
-
-    tmin = max(tmin, min(min(t1, t2), tmax));
-    tmax = min(tmax, max(max(t1, t2), tmin));
 
     return tmax > max(tmin, 0.0) ? vec2(max(tmin,0.0),tmax) : vec2(-1.0);
 }
 
 float infintersection(vec3 ro, vec3 rid) {
     vec2 b = floor(ro.xz);
+
     float t1 = (b.x     - ro.x)*rid.x;
     float t2 = (b.x+1.0 - ro.x)*rid.x;
 
@@ -550,7 +541,9 @@ HitPoint march(vec3 ro, vec3 rd, float near, float far, int numTraceSteps) {
         // until we hit a block.
         h = height(p.xz);
         // Check box intersection here
+		float infinter = infintersection(p,rid)+depth;
         vec2 inter = intersection(-0.1,h+0.1,p,rid)+depth;
+		inter.y = min(inter.y, infinter);
         if (inter.x >= depth) {
             // Time to actually raymarch
             depth = inter.x;
@@ -567,12 +560,9 @@ HitPoint march(vec3 ro, vec3 rd, float near, float far, int numTraceSteps) {
 			if (depth <= inter.y) {
             	c.dist = depth;
             	return c;
-			} else {
-				depth = inter.x;
-				p = ro + depth * rd;
 			}
 		}
-		depth += infintersection(p,rid)+EPSILON;
+		depth = infinter+EPSILON;
 		p = ro + depth * rd;
 
 		if (depth >= far) break;
@@ -788,17 +778,6 @@ vec3 direction(float fov, vec2 coord, vec2 size) {
     return normalize(tmp);
 }
 
-float fbm(vec3 p, float f, float lacunarity, float add) {
-    float t = 0.0, amp = 1.0, sumAmp = 0.0;
-    for(int k = 0; k < 4; ++k) {
-        t += min(snoise(p * f)+add, 1.0) * amp;
-        sumAmp += amp;
-        amp *= 0.5;
-        f *= lacunarity;
-    }
-    return t/sumAmp;
-}
-
 vec3 render(vec3 ro, vec3 rd) {
 	HitPoint result;
 	vec3 colour, tmpColour, skyColour;
@@ -821,18 +800,20 @@ vec3 render(vec3 ro, vec3 rd) {
 
 		// clouds
 		// https://www.shadertoy.com/view/MdBGzG
+		#ifdef ENABLE_CLOUDS
 		float pt = (1000.0-ro.y)/rd.y;
 		if (pt > 0.0) {
 			vec3 spos = ro + pt*rd;
             vec3 fpos = vec3(spos.xz*0.0001-vec2(time*0.02,0), time*0.01);
 			float clo = clamp(1.0
-                - fbm(fpos,4.0,0.1,0.3)
-                + fbm(fpos,24.0,0.8,-0.1)*0.3
-                - fbm(fpos,64.0,0.4,-0.1)*0.1,
+                - snoise(fpos*4.0) - 0.3
+                + snoise(fpos*24.0)*0.3 - 0.03
+                - snoise(fpos*64.0)*0.1 + 0.01,
                 0.0, 1.0);
 			vec3 cloCol = mix(vec3(0.4,0.5,0.6), vec3(1.3,0.6,0.4), pow(sun,2.0))*(0.5+0.5*clo);
 			skyColour = mix(skyColour, cloCol, 0.5*smoothstep(0.4, 1.0, clo));
 		}
+		#endif
 
 		if (result.dist < FAR_DIST - EPSILON) {
 			// Calculate colour based on lights
