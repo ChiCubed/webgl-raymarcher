@@ -85,9 +85,27 @@ p.subtitle {
     margin: 10px;
 }
 
-.audio-wrapper audio {
+.audio-wrapper > * {
     margin: auto;
     vertical-align: middle;
+    display: inline-block;
+}
+
+.input-wrapper {
+    font-size: 13px;
+    font-family: Roboto;
+
+    color: white;
+
+    text-align: center;
+    margin: 10px;
+
+    overflow: hidden;
+
+    -webkit-transition: height .3s ease;
+       -moz-transition: height .3s ease;
+         -o-transition: height .3s ease;
+            transition: height .3s ease;
 }
 
 span.info-text {
@@ -109,8 +127,10 @@ button, .btn {
 	padding: 5px;
 	border-radius: 5px;
 
-    -webkit-transition: padding 0.2s ease;
-            transition: padding 0.2s ease;
+    -webkit-transition: padding .2s ease;
+       -moz-transition: padding .2s ease;
+         -o-transition: padding .2s ease;
+            transition: padding .2s ease;
 }
 
 button:hover, .btn:hover {
@@ -144,6 +164,31 @@ button:focus, .btn:focus {
 
 .btn-file input[type=file] {
     display: none;
+}
+
+input[type=text] {
+    border: 1px solid white;
+    background-color: black;
+    color: white;
+
+    font-family: Roboto;
+    font-size: 13px;
+
+    padding: 5px;
+    border-radius: 5px;
+
+    width: 200px;
+}
+
+input[type=text]:focus {
+    border-color: lightblue;
+    outline: none;
+
+    width: 220px;
+}
+
+.input-wrapper > input {
+    vertical-align: top;
 }
 
 nav {

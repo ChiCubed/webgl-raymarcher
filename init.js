@@ -8,7 +8,11 @@ var program = null;
 var cameraPosUniform, viewToWorldUniform, screenSizeUniform,
     timeUniform, frequencyDataUniform;
 
-var fpsElement, audioElement, audioFileInput;
+var fpsElement, audioPlayer, audioElement, audioElementWrapper, audioFileInput;
+var soundcloudInput, soundcloudInputWrapper;
+var soundcloudInputHeight;
+
+var clientId = '4LwsdPbmqbk86jdx4noywT0gRbOIbWvU';
 
 // ID of next frame to render.
 var nextRenderFrame = null;
@@ -188,6 +192,7 @@ function resizeCanvas(width, height) {
 }
 
 function changeAudioInput(inputMethod) {
+    showInput('none');
     if (inputMethod == 'microphone') {
         if (navigator &&
                 navigator.mediaDevices &&
@@ -201,12 +206,14 @@ function changeAudioInput(inputMethod) {
                 source = audioCtx.createMediaStreamSource(stream);
                 source.connect(analyser);
             });
-            audioElement.src = '';
+            audioElementWrapper.style.display = 'none';
+            audioPlayer.setSrc('');
         } else {
             alert('Cannot access microphone');
         }
     } else if (inputMethod == 'file') {
-        audioElement.src = URL.createObjectURL(audioFileInput.files[0]);
+        audioElementWrapper.style.display = '';
+        audioPlayer.setSrc(URL.createObjectURL(audioFileInput.files[0]));
 
         if (source !== null) source.disconnect();
         analyser.disconnect();
@@ -214,6 +221,30 @@ function changeAudioInput(inputMethod) {
         source = audioElementSource;
         source.connect(analyser);
         analyser.connect(audioCtx.destination);
+    } else if (inputMethod == 'soundcloud') {
+        audioElementWrapper.style.display = '';
+
+        if (source !== null) source.disconnect();
+        analyser.disconnect();
+
+        // Get file
+        SC.resolve(soundcloudInput.value).then(function(track) {
+            audioPlayer.setSrc(track.stream_url + '?client_id='+clientId);
+            audioPlayer.load();
+
+            source = audioElementSource;
+            source.connect(analyser);
+            analyser.connect(audioCtx.destination);
+        });
+    }
+}
+
+
+function showInput(formId) {
+    if (formId == 'none') {
+        soundcloudInputWrapper.style.height = 0;
+    } else if (formId == 'soundcloud') {
+        soundcloudInputWrapper.style.height = soundcloudInputHeight;
     }
 }
 
@@ -222,8 +253,30 @@ function changeAudioInput(inputMethod) {
 function init() {
 	glCanvas = document.getElementById('gl-canvas');
     fpsElement = document.getElementById('fps-counter');
-    audioElement = document.getElementById('audio-player');
+    audioElementWrapper = document.getElementById('audio-player').parentElement;
     audioFileInput = document.getElementById('audio-file');
+    soundcloudInput = document.getElementById('soundcloud-input');
+    soundcloudInputWrapper = soundcloudInput.parentElement;
+
+    // this is necessary to calculate
+    // height accurately
+    soundcloudInputWrapper.style.boxSizing = 'border-box';
+
+    soundcloudInputHeight = soundcloudInputWrapper.clientHeight;
+    soundcloudInputWrapper.style.height = 0;
+
+    audioPlayer = new MediaElementPlayer('audio-player', {
+        pluginPath: "mediaelement/",
+        success: function(mediaElement, originalNode, instance) {
+            audioElement = originalNode;
+            audioElement.crossOrigin = 'anonymous';
+        }
+    });
+
+    // SoundCloud API init
+    SC.initialize({
+        client_id: clientId
+    });
 
     audioFileInput.onchange = function() {
         changeAudioInput('file');

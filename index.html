@@ -28,6 +28,11 @@
 
 		<script src="gl-matrix/gl-matrix-min.js" type="text/javascript"></script>
 
+        <script src="mediaelement/mediaelement-and-player.min.js"></script>
+        <link rel="stylesheet" href="mediaelement/mediaelementplayer.min.css">
+
+        <script src="https://connect.soundcloud.com/sdk/sdk-3.2.2.js"></script>
+
         <script src="load-codemirror.js" type="text/javascript"></script>
 		<script src="init.js" type="text/javascript"></script>
 
@@ -36,7 +41,7 @@
 	</head>
 	<body onload="loadCodeMirror()">
 		<h1>WebGL Raymarcher</h1>
-		<p class="subtitle">Created by <a href="https://github.com/ChiCubed">@ChiCubed</a> using <a href="http://codemirror.net/">CodeMirror</a> and <a href="http://glmatrix.net/">glMatrix</a></p>
+		<p class="subtitle">Created by <a href="https://github.com/ChiCubed">@ChiCubed</a> using <a href="http://codemirror.net/">CodeMirror</a>, <a href="http://www.mediaelementjs.com/">MediaElement.js</a>, the <a href="https://developers.soundcloud.com/docs/api/guide">SoundCloud API</a> and <a href="http://glmatrix.net/">glMatrix</a></p>
 		<div class="canvas-container">
 			<canvas id="gl-canvas" width="640" height="480"></canvas>
             <p id="fps-counter" style="text-align: center"></p>
@@ -46,6 +51,10 @@
             Audio Player:
             <audio id="audio-player" controls></audio>
         </div>
+        <div class="input-wrapper">
+            SoundCloud Track URL: <input type="text" id="soundcloud-input"/>
+            <button onclick="changeAudioInput('soundcloud')">Go</button>
+        </div>
         <nav>
             <span class="info-text">Select audio input method:</span>
             <button onclick="changeAudioInput('microphone')">Microphone</button>
@@ -53,6 +62,7 @@
                 Local File
                 <input type="file" id="audio-file" accept="audio/*"/>
             </label>
+            <button onclick="showInput('soundcloud')">SoundCloud</button>
         </nav>
 		<div id="codemirror-container"></div>
 	</body>
