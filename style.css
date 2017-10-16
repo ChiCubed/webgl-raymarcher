@@ -133,6 +133,19 @@ button, .btn {
             transition: padding .2s ease;
 }
 
+button:disabled {
+	color: grey;
+	border-color: grey;
+}
+
+button:disabled:hover {
+	color: grey;
+	cursor: default;
+
+	padding-left: 5px;
+	padding-right: 5px;
+}
+
 button:hover, .btn:hover {
 	color: lightblue;
 	cursor: pointer;

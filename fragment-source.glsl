@@ -585,7 +585,8 @@ float shadow(vec3 ro, vec3 rd, float near, float far, float k, int numMarchSteps
 		res = min(res, k*dist/t);
 
 		// go to next cell
-        t += min(dist, infintersection(p, rid)+EPSILON);
+		// or just step
+        t += min(dist * stepScale, infintersection(p, rid)+EPSILON);
 		p = ro + rd*t;
 
 		if (dist < EPSILON || t >= far) break;

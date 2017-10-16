@@ -228,14 +228,18 @@ function changeAudioInput(inputMethod) {
         analyser.disconnect();
 
         // Get file
-        SC.resolve(soundcloudInput.value).then(function(track) {
-            audioPlayer.setSrc(track.stream_url + '?client_id='+clientId);
-            audioPlayer.load();
+		if (typeof SC === 'undefined') {
+			console.log('SoundCloud API could not be loaded');
+		} else {
+			SC.resolve(soundcloudInput.value).then(function(track) {
+				audioPlayer.setSrc(track.stream_url + '?client_id='+clientId);
+				audioPlayer.load();
 
-            source = audioElementSource;
-            source.connect(analyser);
-            analyser.connect(audioCtx.destination);
-        });
+				source = audioElementSource;
+				source.connect(analyser);
+				analyser.connect(audioCtx.destination);
+			});
+		}
     }
 }
 
@@ -274,9 +278,16 @@ function init() {
     });
 
     // SoundCloud API init
-    SC.initialize({
-        client_id: clientId
-    });
+	if (typeof SC !== 'undefined') {
+		SC.initialize({
+			client_id: clientId
+		});
+	} else {
+		// We can't let the user
+		// input a SoundCloud link
+		var scBtn = document.getElementById('soundcloudButton');
+		scBtn.disabled = true;
+	}
 
     audioFileInput.onchange = function() {
         changeAudioInput('file');
